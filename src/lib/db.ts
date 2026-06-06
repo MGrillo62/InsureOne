@@ -394,15 +394,12 @@ export async function initializeDatabase() {
 export async function validateTenantCredentials(email: string, password: string): Promise<Tenant | null> {
   await initializeDatabase();
   
-  // Direct matching for superadmin alias
-  if ((email === 'admin@insureone.com' || email === 'superadmin') && (password === 'admin' || password === 'superadmin')) {
-    const res = await pool.query("SELECT * FROM tenants WHERE id = 'T-001'");
-    return res.rows[0] || null;
-  }
+  // Resolve alias: if they input 'superadmin' as username, map it to 'admin@insureone.com'
+  const targetEmail = (email.toLowerCase() === 'superadmin') ? 'admin@insureone.com' : email;
   
   const res = await pool.query(
     "SELECT * FROM tenants WHERE (admin_email = $1 OR admin_email = $2) AND admin_password = $3 AND (estado = 'Activo' OR estado IS NULL)",
-    [email, email.toLowerCase(), password]
+    [targetEmail, targetEmail.toLowerCase(), password]
   );
   return res.rows[0] || null;
 }
@@ -936,4 +933,27 @@ export async function createReclamacion(rec: Omit<Reclamacion, 'id' | 'fecha_cre
     ...row,
     monto_reclamado: parseFloat(row.monto_reclamado)
   };
+}
+
+export async function updateTenantPassword(tenantId: string, currentPass: string, newPass: string): Promise<boolean> {
+  await initializeDatabase();
+  const res = await pool.query(
+    "SELECT admin_password FROM tenants WHERE id = $1",
+    [tenantId]
+  );
+  
+  const tenant = res.rows[0];
+  if (!tenant) {
+    throw new Error('Tenant no encontrado');
+  }
+  
+  if (tenant.admin_password !== currentPass) {
+    return false; // Wrong current password
+  }
+  
+  await pool.query(
+    "UPDATE tenants SET admin_password = $1 WHERE id = $2",
+    [newPass, tenantId]
+  );
+  return true;
 }

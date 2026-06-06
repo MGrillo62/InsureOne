@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { setActiveTenantId, updateCurrentUser } from '@/lib/db';
+import { setActiveTenantId, updateCurrentUser, updateTenantPassword } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -59,7 +59,16 @@ export async function POST(request: Request) {
     }
 
     if (action === 'changePassword') {
-      // Simulate password update
+      const { password, newPassword } = body;
+      if (!password || !newPassword) {
+        return NextResponse.json({ error: 'Contraseña actual y nueva requeridas' }, { status: 400 });
+      }
+
+      const success = await updateTenantPassword(sessionUser.id_tenant, password, newPassword);
+      if (!success) {
+        return NextResponse.json({ error: 'La contraseña actual es incorrecta' }, { status: 400 });
+      }
+
       return NextResponse.json({ success: true, message: 'Contraseña cambiada exitosamente' });
     }
 
