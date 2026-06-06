@@ -11,7 +11,11 @@ import {
   Trash2, 
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Edit2,
+  Calendar,
+  ChevronDown,
+  History
 } from 'lucide-react';
 
 interface Lead {
@@ -27,6 +31,14 @@ interface Lead {
   prima_proyectada: number;
   ramo: string;
   fecha_creacion: string;
+  fecha_seguimiento?: string;
+  historial?: Array<{
+    fecha: string;
+    accion: string;
+    nota: string;
+    usuario: string;
+    fecha_seguimiento?: string;
+  }>;
 }
 
 const COLUMNS = [
@@ -52,8 +64,10 @@ export default function LeadsPage() {
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
-  // Form Fields
+  // Form Fields (Create/Edit)
   const [nombre, setNombre] = useState('');
   const [compania, setCompania] = useState('');
   const [documento, setDocumento] = useState('');
@@ -61,9 +75,17 @@ export default function LeadsPage() {
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
   const [giro, setGiro] = useState('');
-  const [ramo, setRamo] = useState('Vehicular');
   const [primaProyectada, setPrimaProyectada] = useState('');
   const [estado, setEstado] = useState<'nuevo' | 'contactado' | 'cotizando' | 'ganado' | 'perdido'>('nuevo');
+
+  // Ramo multiselect
+  const [selectedRamos, setSelectedRamos] = useState<string[]>(['Vehicular']);
+  const [showRamoDropdown, setShowRamoDropdown] = useState(false);
+
+  // New Note fields for Lead Tracking
+  const [noteAction, setNoteAction] = useState('Nota Interna');
+  const [noteText, setNoteText] = useState('');
+  const [fechaSeguimiento, setFechaSeguimiento] = useState('');
 
   // Fetch leads
   const fetchLeads = async () => {
@@ -171,7 +193,7 @@ export default function LeadsPage() {
           telefono,
           direccion,
           giro,
-          ramo,
+          ramo: selectedRamos.join(', '),
           prima_proyectada: Number(primaProyectada || 0),
           estado
         })
@@ -189,6 +211,105 @@ export default function LeadsPage() {
         setGiro('');
         setPrimaProyectada('');
         setEstado('nuevo');
+        setSelectedRamos(['Vehicular']);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Trigger Edit Lead Modal
+  const handleEditLeadClick = (lead: Lead) => {
+    setEditingLead(lead);
+    setNombre(lead.nombre);
+    setCompania(lead.compania || '');
+    setDocumento(lead.documento);
+    setEmail(lead.email);
+    setTelefono(lead.telefono);
+    setDireccion(lead.direccion);
+    setGiro(lead.giro);
+    setPrimaProyectada(String(lead.prima_proyectada));
+    setEstado(lead.estado);
+    setSelectedRamos(lead.ramo ? lead.ramo.split(',').map(r => r.trim()) : []);
+    
+    // Reset Note form
+    setNoteAction('Nota Interna');
+    setNoteText('');
+    setFechaSeguimiento('');
+    setEditModalOpen(true);
+  };
+
+  // Submit updated lead details
+  const handleUpdateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead) return;
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          id: editingLead.id,
+          updatedFields: {
+            nombre,
+            compania,
+            documento,
+            email,
+            telefono,
+            direccion,
+            giro,
+            ramo: selectedRamos.join(', '),
+            prima_proyectada: Number(primaProyectada || 0),
+            estado
+          }
+        })
+      });
+      if (res.ok) {
+        fetchLeads();
+        setEditModalOpen(false);
+        setEditingLead(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Add a tracking note to lead history
+  const handleAddLeadNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead || !noteText) return;
+    try {
+      const newNote = {
+        fecha: new Date().toISOString().split('T')[0],
+        accion: noteAction,
+        nota: noteText,
+        usuario: 'Analista Principal',
+        fecha_seguimiento: fechaSeguimiento || undefined
+      };
+
+      const existingHistory = editingLead.historial || [];
+      const updatedHistory = [...existingHistory, newNote];
+
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          id: editingLead.id,
+          updatedFields: {
+            historial: updatedHistory,
+            fecha_seguimiento: fechaSeguimiento || null
+          }
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Update local editingLead state
+        setEditingLead(data.lead);
+        setNoteText('');
+        setFechaSeguimiento('');
+        fetchLeads();
       }
     } catch (err) {
       console.error(err);
@@ -300,12 +421,29 @@ export default function LeadsPage() {
                     </div>
                   ) : (
                     colLeads.map((lead) => (
-                      <div key={lead.id} className="kanban-card animate-slide-in">
+                      <div 
+                        key={lead.id} 
+                        className="kanban-card animate-slide-in"
+                        style={{ cursor: 'pointer' }}
+                        onDoubleClick={() => handleEditLeadClick(lead)}
+                      >
                         <div className="kanban-card-title">{lead.nombre}</div>
                         <div className="kanban-card-meta">
                           {lead.compania && <div style={{ fontWeight: 500 }}>{lead.compania}</div>}
-                          <div>Ramo: <span style={{ color: '#0F172A', fontWeight: 500 }}>{lead.ramo}</span></div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px', marginBottom: '4px' }}>
+                            {lead.ramo ? lead.ramo.split(',').map(r => (
+                              <span key={r} className="badge badge-secondary" style={{ fontSize: '10px', padding: '2px 6px', margin: 0 }}>
+                                {r.trim()}
+                              </span>
+                            )) : <span style={{ color: '#94A3B8' }}>Sin Ramo</span>}
+                          </div>
                           <div>Giro: {lead.giro}</div>
+                          {lead.fecha_seguimiento && (
+                            <div style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                              <Calendar size={11} />
+                              Seguimiento: {lead.fecha_seguimiento}
+                            </div>
+                          )}
                         </div>
                         <div className="kanban-card-footer">
                           <span className="kanban-card-value">
@@ -313,6 +451,13 @@ export default function LeadsPage() {
                           </span>
                           
                           <div className="kanban-card-actions">
+                            <button 
+                              className="btn-card-action" 
+                              title="Editar"
+                              onClick={() => handleEditLeadClick(lead)}
+                            >
+                              <Edit2 size={13} />
+                            </button>
                             {col.key !== 'nuevo' && (
                               <button 
                                 className="btn-card-action" 
@@ -397,12 +542,22 @@ export default function LeadsPage() {
                   </tr>
                 ) : (
                   paginatedLeads.map((lead) => (
-                    <tr key={lead.id}>
+                    <tr 
+                      key={lead.id} 
+                      style={{ cursor: 'pointer' }}
+                      onDoubleClick={() => handleEditLeadClick(lead)}
+                    >
                       <td style={{ fontWeight: 600 }}>{lead.nombre}</td>
                       <td>{lead.compania || '-'}</td>
                       <td>{lead.documento}</td>
                       <td>
-                        <span className="badge badge-info">{lead.ramo}</span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {lead.ramo ? lead.ramo.split(',').map(r => (
+                            <span key={r} className="badge badge-info" style={{ fontSize: '10.5px', padding: '2px 6px', margin: 0 }}>
+                              {r.trim()}
+                            </span>
+                          )) : <span style={{ color: '#94A3B8' }}>Sin Ramo</span>}
+                        </div>
                       </td>
                       <td style={{ fontFamily: 'var(--font-title)', fontWeight: 600 }}>
                         USD {lead.prima_proyectada.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -418,12 +573,20 @@ export default function LeadsPage() {
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            title="Editar"
+                            onClick={() => handleEditLeadClick(lead)}
+                          >
+                            <Edit2 size={13} />
+                          </button>
                           <select 
                             className="form-input btn-sm" 
                             style={{ width: 'auto', padding: '4px 8px' }}
                             value={lead.estado}
                             onChange={(e) => moveLead(lead.id, e.target.value as Lead['estado'])}
+                            onClick={(e) => e.stopPropagation()} // Prevent row doubleclick trigger
                           >
                             <option value="nuevo">Nuevo</option>
                             <option value="contactado">Contactado</option>
@@ -431,7 +594,11 @@ export default function LeadsPage() {
                             <option value="ganado">Ganado</option>
                             <option value="perdido">Perdido</option>
                           </select>
-                          <button className="btn btn-secondary btn-sm" style={{ color: '#EF4444' }} onClick={() => handleDelete(lead.id)}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ color: '#EF4444' }} 
+                            onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }}
+                          >
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -560,16 +727,102 @@ export default function LeadsPage() {
                       onChange={(e) => setGiro(e.target.value)} 
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Ramo de Interés *</label>
-                    <select className="form-input" value={ramo} onChange={(e) => setRamo(e.target.value)}>
-                      <option value="Vehicular">Vehicular</option>
-                      <option value="EPS">EPS</option>
-                      <option value="SCTR">SCTR</option>
-                      <option value="Vida">Vida</option>
-                      <option value="Multirriesgo">Multirriesgo</option>
-                    </select>
-                  </div>
+                   <div className="form-group" style={{ position: 'relative' }}>
+                     <label className="form-label">Ramos de Interés *</label>
+                     <div 
+                       className="form-input" 
+                       style={{ 
+                         display: 'flex', 
+                         justifyContent: 'space-between', 
+                         alignItems: 'center', 
+                         cursor: 'pointer',
+                         minHeight: '38px',
+                         height: 'auto',
+                         padding: '6px 12px'
+                       }}
+                       onClick={() => setShowRamoDropdown(!showRamoDropdown)}
+                     >
+                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                         {selectedRamos.length === 0 ? (
+                           <span style={{ color: '#94A3B8' }}>Seleccione ramos...</span>
+                         ) : (
+                           selectedRamos.map(r => (
+                             <span 
+                               key={r} 
+                               className="badge badge-info" 
+                               style={{ 
+                                 margin: 0, 
+                                 fontSize: '11px', 
+                                 padding: '2px 6px',
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 gap: '4px'
+                               }}
+                             >
+                               {r}
+                               <span 
+                                 style={{ cursor: 'pointer', fontWeight: 'bold' }} 
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setSelectedRamos(prev => prev.filter(x => x !== r));
+                                 }}
+                               >
+                                 &times;
+                               </span>
+                             </span>
+                           ))
+                         )}
+                       </div>
+                       <ChevronDown size={14} style={{ color: '#64748B' }} />
+                     </div>
+
+                     {showRamoDropdown && (
+                       <div style={{ 
+                         position: 'absolute', 
+                         top: '100%', 
+                         left: 0, 
+                         right: 0, 
+                         backgroundColor: '#FFFFFF', 
+                         border: '1px solid #E2E8F0', 
+                         borderRadius: '8px', 
+                         boxShadow: 'var(--shadow-lg)', 
+                         zIndex: 110, 
+                         marginTop: '4px',
+                         padding: '8px 0'
+                       }}>
+                         {['Vehicular', 'EPS', 'SCTR', 'Vida', 'Multirriesgo'].map(r => {
+                           const isChecked = selectedRamos.includes(r);
+                           return (
+                             <div 
+                               key={r} 
+                               className="dropdown-item" 
+                               style={{ 
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 gap: '10px', 
+                                 padding: '8px 12px', 
+                                 cursor: 'pointer' 
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setSelectedRamos(prev => 
+                                   prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]
+                                 );
+                               }}
+                             >
+                               <input 
+                                 type="checkbox" 
+                                 checked={isChecked} 
+                                 readOnly 
+                                 style={{ cursor: 'pointer' }}
+                               />
+                               <span>{r}</span>
+                             </div>
+                           );
+                         })}
+                       </div>
+                     )}
+                   </div>
                   <div className="form-group">
                     <label className="form-label">Prima Proyectada (USD) *</label>
                     <input 
@@ -598,6 +851,322 @@ export default function LeadsPage() {
                 <button type="submit" className="btn btn-primary">Registrar Prospecto</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL WITH NOTES & HISTORY */}
+      {editModalOpen && editingLead && (
+        <div className="modal-overlay">
+          <div className="modal-content large" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
+              <h3 className="modal-title">Editar Prospecto Comercial</h3>
+              <button className="modal-close-btn" onClick={() => { setEditModalOpen(false); setEditingLead(null); }}>&times;</button>
+            </div>
+            
+            <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr', gap: '24px', overflowY: 'auto', flex: 1 }}>
+              
+              {/* Left side: General Form Fields */}
+              <form onSubmit={handleUpdateLead} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="grid-cols-2">
+                  <div className="form-group">
+                    <label className="form-label">Nombre / Razón Social *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={nombre} 
+                      onChange={(e) => setNombre(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Empresa / Compañía</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={compania} 
+                      onChange={(e) => setCompania(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid-cols-2">
+                  <div className="form-group">
+                    <label className="form-label">Documento ID *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={documento} 
+                      onChange={(e) => setDocumento(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Correo Electrónico</label>
+                    <input 
+                      type="email" 
+                      className="form-input" 
+                      value={email} 
+                      onChange={(e) => setEmail(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid-cols-2">
+                  <div className="form-group">
+                    <label className="form-label">Teléfono</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={telefono} 
+                      onChange={(e) => setTelefono(e.target.value)} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Giro / Actividad</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={giro} 
+                      onChange={(e) => setGiro(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Dirección Completa</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={direccion} 
+                    onChange={(e) => setDireccion(e.target.value)} 
+                  />
+                </div>
+
+                <div className="grid-cols-2">
+                  <div className="form-group">
+                    <label className="form-label">Prima Proyectada (USD) *</label>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      value={primaProyectada} 
+                      onChange={(e) => setPrimaProyectada(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Etapa Actual *</label>
+                    <select className="form-input" value={estado} onChange={(e) => setEstado(e.target.value as any)}>
+                      <option value="nuevo">Nuevo Contacto</option>
+                      <option value="contactado">Contactado</option>
+                      <option value="cotizando">Cotizando</option>
+                      <option value="ganado">Cerrado Ganado</option>
+                      <option value="perdido">Cerrado Perdido</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ position: 'relative' }}>
+                  <label className="form-label">Ramos de Interés *</label>
+                  <div 
+                    className="form-input" 
+                    style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      cursor: 'pointer',
+                      minHeight: '38px',
+                      height: 'auto',
+                      padding: '6px 12px'
+                    }}
+                    onClick={() => setShowRamoDropdown(!showRamoDropdown)}
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {selectedRamos.length === 0 ? (
+                        <span style={{ color: '#94A3B8' }}>Seleccione ramos...</span>
+                      ) : (
+                        selectedRamos.map(r => (
+                          <span 
+                            key={r} 
+                            className="badge badge-info" 
+                            style={{ 
+                              margin: 0, 
+                              fontSize: '11px', 
+                              padding: '2px 6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            {r}
+                            <span 
+                              style={{ cursor: 'pointer', fontWeight: 'bold' }} 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRamos(prev => prev.filter(x => x !== r));
+                              }}
+                            >
+                              &times;
+                            </span>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <ChevronDown size={14} style={{ color: '#64748B' }} />
+                  </div>
+
+                  {showRamoDropdown && (
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '100%', 
+                      left: 0, 
+                      right: 0, 
+                      backgroundColor: '#FFFFFF', 
+                      border: '1px solid #E2E8F0', 
+                      borderRadius: '8px', 
+                      boxShadow: 'var(--shadow-lg)', 
+                      zIndex: 110, 
+                      marginTop: '4px',
+                      padding: '8px 0'
+                    }}>
+                      {['Vehicular', 'EPS', 'SCTR', 'Vida', 'Multirriesgo'].map(r => {
+                        const isChecked = selectedRamos.includes(r);
+                        return (
+                          <div 
+                            key={r} 
+                            className="dropdown-item" 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '10px', 
+                              padding: '8px 12px', 
+                              cursor: 'pointer' 
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedRamos(prev => 
+                                prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]
+                              );
+                            }}
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked} 
+                              readOnly 
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span>{r}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                    Actualizar Datos del Prospecto
+                  </button>
+                </div>
+              </form>
+
+              {/* Right side: Follow-up History & Add note Form */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* 1. History of notes */}
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <History size={16} style={{ color: '#2563EB' }} />
+                    Historial de Seguimiento
+                  </h4>
+
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', background: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '12px' }}>
+                    {!editingLead.historial || editingLead.historial.length === 0 ? (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                        No hay comentarios de seguimiento registrados aún.
+                      </div>
+                    ) : (
+                      <div className="timeline" style={{ paddingLeft: '10px' }}>
+                        {editingLead.historial.map((log, index) => (
+                          <div key={index} className="timeline-item" style={{ paddingBottom: '12px' }}>
+                            <div className="timeline-item-indicator" style={{ top: '4px' }} />
+                            <div className="timeline-item-content" style={{ marginLeft: '16px' }}>
+                              <div className="timeline-item-header" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                                <span style={{ fontWeight: 600, color: '#2563EB' }}>{log.accion}</span>
+                                <span style={{ color: '#94A3B8' }}>{log.fecha}</span>
+                              </div>
+                              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#334155' }}>{log.nota}</p>
+                              {log.fecha_seguimiento && (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#D97706', fontWeight: 500, marginTop: '4px' }}>
+                                  <Calendar size={10} />
+                                  Próximo contacto: {log.fecha_seguimiento}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Add note form */}
+                <form onSubmit={handleAddLeadNote} style={{ background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', margin: 0 }}>Agregar Nota de Seguimiento</h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '11px' }}>Acción</label>
+                      <select 
+                        className="form-input" 
+                        style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                        value={noteAction} 
+                        onChange={(e) => setNoteAction(e.target.value)}
+                      >
+                        <option value="Llamada Telefónica">Llamada Telefónica</option>
+                        <option value="Envío de Correo">Envío de Correo</option>
+                        <option value="WhatsApp Enviado">WhatsApp Enviado</option>
+                        <option value="Visita Comercial">Visita Comercial</option>
+                        <option value="Nota Interna">Nota Interna</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '11px' }}>Fecha de Seguimiento (Opcional)</label>
+                      <input 
+                        type="date" 
+                        className="form-input" 
+                        style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                        value={fechaSeguimiento}
+                        onChange={(e) => setFechaSeguimiento(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>Comentario de Gestión *</label>
+                    <textarea 
+                      placeholder="Ingrese los comentarios del seguimiento..." 
+                      className="form-input" 
+                      style={{ padding: '6px 10px', fontSize: '12.5px', height: '50px', resize: 'none' }}
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      required 
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="submit" className="btn btn-primary btn-sm">Registrar Nota</button>
+                  </div>
+                </form>
+
+              </div>
+
+            </div>
+            
+            <div className="modal-footer" style={{ flexShrink: 0 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setEditModalOpen(false); setEditingLead(null); }}>Cerrar</button>
+            </div>
           </div>
         </div>
       )}

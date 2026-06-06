@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getLeads, createLead, updateLeadStatus, deleteLead } from '@/lib/db';
+import { getLeads, createLead, updateLeadStatus, deleteLead, updateLead } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -36,6 +36,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'ID y Estado requeridos' }, { status: 400 });
       }
       const updated = await updateLeadStatus(id, estado);
+      return NextResponse.json({ success: true, lead: updated });
+    }
+    
+    if (action === 'update') {
+      if (!id) {
+        return NextResponse.json({ error: 'ID requerido para actualizar' }, { status: 400 });
+      }
+      const { updatedFields } = body;
+      const updated = await updateLead(id, updatedFields);
       return NextResponse.json({ success: true, lead: updated });
     }
     

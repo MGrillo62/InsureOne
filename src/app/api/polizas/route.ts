@@ -71,6 +71,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'ID requerido para actualizar' }, { status: 400 });
       }
       const updated = await updatePolicy(id, {
+        id_cliente,
         compania_aseguradora,
         ramo,
         numero_poliza,

@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
+import { cookies } from 'next/headers';
 
 // PostgreSQL connection pool
 const connectionString = process.env.DATABASE_URL;
@@ -61,6 +62,7 @@ export interface Client {
     accion: string;
     nota: string;
     usuario: string;
+    fecha_cumplimiento?: string;
   }>;
 }
 
@@ -113,6 +115,24 @@ export interface Lead {
   prima_proyectada: number;
   ramo: string;
   fecha_creacion: string;
+  fecha_seguimiento?: string;
+  historial?: Array<{
+    fecha: string;
+    accion: string;
+    nota: string;
+    usuario: string;
+    fecha_seguimiento?: string;
+  }>;
+}
+
+export interface Aseguradora {
+  id?: number;
+  id_tenant: string;
+  nombre: string;
+  telefono: string;
+  ejecutivo: string;
+  email: string;
+  direccion: string;
 }
 
 export interface Claim {
@@ -143,6 +163,35 @@ let currentUser: User = {
   avatar: 'SA',
   id_tenant: 'T-001'
 };
+
+export async function getRequestTenantId(): Promise<string> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('insureone_session');
+    if (sessionCookie && sessionCookie.value) {
+      const sessionUser = JSON.parse(sessionCookie.value);
+      if (sessionUser && sessionUser.id_tenant) {
+        return sessionUser.id_tenant;
+      }
+    }
+  } catch (e) {
+    // Si cookies() falla o no se puede resolver, volvemos al activeTenantId global.
+  }
+  return activeTenantId;
+}
+
+export async function getRequestUser(): Promise<User> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('insureone_session');
+    if (sessionCookie && sessionCookie.value) {
+      return JSON.parse(sessionCookie.value);
+    }
+  } catch (e) {
+    // Si cookies() falla, volvemos a la variable de usuario de la sesión global.
+  }
+  return currentUser;
+}
 
 // Database Initialization helper
 let databaseInitialized = false;
@@ -243,9 +292,15 @@ export async function initializeDatabase() {
         giro VARCHAR(100) NOT NULL,
         estado VARCHAR(20) NOT NULL,
         prima_proyectada NUMERIC(12, 2) NOT NULL,
-        ramo VARCHAR(50) NOT NULL,
-        fecha_creacion VARCHAR(10) NOT NULL
+        ramo VARCHAR(250) NOT NULL,
+        fecha_creacion VARCHAR(10) NOT NULL,
+        historial JSONB DEFAULT '[]'::jsonb,
+        fecha_seguimiento VARCHAR(10)
       );
+      
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS historial JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS fecha_seguimiento VARCHAR(10);
+      ALTER TABLE leads ALTER COLUMN ramo TYPE VARCHAR(250);
       
       CREATE TABLE IF NOT EXISTS siniestros (
         id VARCHAR(10) PRIMARY KEY,
@@ -278,6 +333,16 @@ export async function initializeDatabase() {
         pedido TEXT NOT NULL,
         fecha_creacion VARCHAR(10) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS aseguradoras (
+        id SERIAL PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        nombre VARCHAR(100) NOT NULL,
+        telefono VARCHAR(50) NOT NULL,
+        ejecutivo VARCHAR(100) NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        direccion TEXT NOT NULL
       );
     `);
 
@@ -385,6 +450,34 @@ export async function initializeDatabase() {
       UPDATE tenants SET admin_email = 'chiclayo@insureone.com', admin_password = 'chiclayo' WHERE id = 'T-003' AND (admin_email IS NULL OR admin_email = '');
     `);
 
+    // Seed initial insurers if the table is empty
+    const asegCheck = await pool.query('SELECT count(*) FROM aseguradoras');
+    const asegCount = parseInt(asegCheck.rows[0].count);
+    if (asegCount === 0) {
+      console.log('Seeding initial insurers...');
+      const defaultIns = [
+        ['T-001', 'Rimac Seguros', '01 411-1111', 'Roberto Quiroz', 'rquiroz@rimac.com.pe', 'Av. Paseo de la República 3501, San Isidro'],
+        ['T-001', 'Pacífico Seguros', '01 513-5000', 'Vanessa Prado', 'vprado@pacifico.com.pe', 'Av. Juan de Arona 830, San Isidro'],
+        ['T-001', 'Mapfre Perú', '01 213-3333', 'Carlos Mendoza', 'cmendoza@mapfre.com.pe', 'Av. 28 de Julio 873, Miraflores'],
+        ['T-001', 'La Positiva', '01 211-0211', 'Gabriela Diaz', 'gdiaz@lapositiva.com.pe', 'Av. San Isidro Carabayllo 444, San Isidro'],
+        ['T-002', 'Rimac Seguros', '01 411-1111', 'Roberto Quiroz', 'rquiroz@rimac.com.pe', 'Av. Paseo de la República 3501, San Isidro'],
+        ['T-002', 'Pacífico Seguros', '01 513-5000', 'Vanessa Prado', 'vprado@pacifico.com.pe', 'Av. Juan de Arona 830, San Isidro'],
+        ['T-002', 'Mapfre Perú', '01 213-3333', 'Carlos Mendoza', 'cmendoza@mapfre.com.pe', 'Av. 28 de Julio 873, Miraflores'],
+        ['T-002', 'La Positiva', '01 211-0211', 'Gabriela Diaz', 'gdiaz@lapositiva.com.pe', 'Av. San Isidro Carabayllo 444, San Isidro'],
+        ['T-003', 'Rimac Seguros', '01 411-1111', 'Roberto Quiroz', 'rquiroz@rimac.com.pe', 'Av. Paseo de la República 3501, San Isidro'],
+        ['T-003', 'Pacífico Seguros', '01 513-5000', 'Vanessa Prado', 'vprado@pacifico.com.pe', 'Av. Juan de Arona 830, San Isidro'],
+        ['T-003', 'Mapfre Perú', '01 213-3333', 'Carlos Mendoza', 'cmendoza@mapfre.com.pe', 'Av. 28 de Julio 873, Miraflores'],
+        ['T-003', 'La Positiva', '01 211-0211', 'Gabriela Diaz', 'gdiaz@lapositiva.com.pe', 'Av. San Isidro Carabayllo 444, San Isidro']
+      ];
+      for (const ins of defaultIns) {
+        await pool.query(
+          `INSERT INTO aseguradoras (id_tenant, nombre, telefono, ejecutivo, email, direccion) 
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          ins
+        );
+      }
+    }
+
     databaseInitialized = true;
   } catch (err) {
     console.error('Error initializing Neon database:', err);
@@ -426,11 +519,11 @@ async function updateTableRecord(tableName: string, id: string, updatedFields: R
   const idIndex = index;
   index++;
 
-  const activeId = activeTenantId;
+  const activeId = await getRequestTenantId();
   values.push(activeId);
   const tenantIndex = index;
 
-  const whereClause = tableName === 'tenants'
+  const whereClause = tableName === 'tenants' || tableName === 'aseguradoras'
     ? `WHERE id = $${idIndex}`
     : `WHERE id = $${idIndex} AND id_tenant = $${tenantIndex}`;
 
@@ -522,20 +615,22 @@ export async function createTenantPago(pago: Omit<TenantPago, 'id'>): Promise<Te
 // CRUD - Clients
 export async function getClients(): Promise<Client[]> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM clientes WHERE id_tenant = $1 ORDER BY nombre ASC', [tenantId]);
   return res.rows;
 }
 
 export async function getClientById(id: string): Promise<Client | undefined> {
   await initializeDatabase();
-  const res = await pool.query('SELECT * FROM clientes WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
+  const tenantId = await getRequestTenantId();
+  const res = await pool.query('SELECT * FROM clientes WHERE id = $1 AND id_tenant = $2', [id, tenantId]);
   return res.rows[0];
 }
 
 export async function createClient(client: Omit<Client, 'id' | 'id_tenant' | 'historial'>): Promise<Client> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
+  const user = await getRequestUser();
   
   const resIds = await pool.query('SELECT id FROM clientes ORDER BY id DESC LIMIT 1');
   const lastId = resIds.rows[0]?.id;
@@ -550,7 +645,7 @@ export async function createClient(client: Omit<Client, 'id' | 'id_tenant' | 'hi
     fecha: new Date().toISOString().split('T')[0],
     accion: 'Registro',
     nota: 'Se creó la ficha del asegurado.',
-    usuario: currentUser.nombre
+    usuario: user.nombre
   }];
 
   const res = await pool.query(
@@ -563,6 +658,7 @@ export async function createClient(client: Omit<Client, 'id' | 'id_tenant' | 'hi
 
 export async function updateClient(id: string, updatedFields: Partial<Omit<Client, 'id' | 'id_tenant' | 'historial'>>): Promise<Client> {
   await initializeDatabase();
+  const user = await getRequestUser();
   const original = await getClientById(id);
   if (!original) throw new Error('Cliente no encontrado');
 
@@ -572,7 +668,7 @@ export async function updateClient(id: string, updatedFields: Partial<Omit<Clien
       fecha: new Date().toISOString().split('T')[0],
       accion: 'Actualización',
       nota: `Campos modificados: ${Object.keys(updatedFields).join(', ')}`,
-      usuario: currentUser.nombre
+      usuario: user.nombre
     }
   ];
 
@@ -580,8 +676,9 @@ export async function updateClient(id: string, updatedFields: Partial<Omit<Clien
   return updateTableRecord('clientes', id, merged);
 }
 
-export async function addClientHistory(id: string, action: string, note: string): Promise<void> {
+export async function addClientHistory(id: string, action: string, note: string, fecha_cumplimiento?: string): Promise<void> {
   await initializeDatabase();
+  const user = await getRequestUser();
   const original = await getClientById(id);
   if (!original) return;
 
@@ -591,7 +688,8 @@ export async function addClientHistory(id: string, action: string, note: string)
       fecha: new Date().toISOString().split('T')[0],
       accion: action,
       nota: note,
-      usuario: currentUser.nombre
+      usuario: user.nombre,
+      fecha_cumplimiento: fecha_cumplimiento || undefined
     }
   ];
 
@@ -601,7 +699,7 @@ export async function addClientHistory(id: string, action: string, note: string)
 // CRUD - Policies
 export async function getPolicies(): Promise<Policy[]> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM polizas WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
   // Map numeric strings back to floats/numbers for safety
   return res.rows.map(row => ({
@@ -618,7 +716,8 @@ export async function getPolicies(): Promise<Policy[]> {
 
 export async function getPolicyById(id: string): Promise<Policy | undefined> {
   await initializeDatabase();
-  const res = await pool.query('SELECT * FROM polizas WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
+  const tenantId = await getRequestTenantId();
+  const res = await pool.query('SELECT * FROM polizas WHERE id = $1 AND id_tenant = $2', [id, tenantId]);
   const row = res.rows[0];
   if (!row) return undefined;
   return {
@@ -635,7 +734,7 @@ export async function getPolicyById(id: string): Promise<Policy | undefined> {
 
 export async function createPolicy(policy: Omit<Policy, 'id' | 'id_tenant'>, installments: number): Promise<{ policy: Policy; schedule: PaymentSchedule[] }> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   
   const resIds = await pool.query('SELECT id FROM polizas ORDER BY id DESC LIMIT 1');
   const lastId = resIds.rows[0]?.id;
@@ -728,7 +827,7 @@ export async function updatePolicy(id: string, updatedFields: Partial<Omit<Polic
 // CRUD - Payment Schedules
 export async function getPaymentSchedules(): Promise<PaymentSchedule[]> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM cronograma WHERE id_tenant = $1 ORDER BY fecha_vencimiento ASC, numero_cuota ASC', [tenantId]);
   return res.rows.map(row => ({
     ...row,
@@ -754,7 +853,7 @@ export async function updatePaymentStatus(id: string, estado_pago?: 'Pendiente' 
 // CRUD - Leads
 export async function getLeads(): Promise<Lead[]> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM leads WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
   return res.rows.map(row => ({
     ...row,
@@ -764,7 +863,7 @@ export async function getLeads(): Promise<Lead[]> {
 
 export async function createLead(lead: Omit<Lead, 'id' | 'id_tenant' | 'fecha_creacion'>): Promise<Lead> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
 
   const resIds = await pool.query('SELECT id FROM leads ORDER BY id DESC LIMIT 1');
   const lastId = resIds.rows[0]?.id;
@@ -776,17 +875,25 @@ export async function createLead(lead: Omit<Lead, 'id' | 'id_tenant' | 'fecha_cr
   const leadId = `LD-${String(nextNum).padStart(3, '0')}`;
 
   const res = await pool.query(
-    `INSERT INTO leads (id, id_tenant, nombre, compania, documento, email, telefono, direccion, giro, estado, prima_proyectada, ramo, fecha_creacion) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+    `INSERT INTO leads (id, id_tenant, nombre, compania, documento, email, telefono, direccion, giro, estado, prima_proyectada, ramo, fecha_creacion, historial, fecha_seguimiento) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
     [
       leadId, tenantId, lead.nombre, lead.compania || '', lead.documento, lead.email, lead.telefono, 
       lead.direccion, lead.giro, lead.estado || 'nuevo', lead.prima_proyectada, lead.ramo, 
-      new Date().toISOString().split('T')[0]
+      new Date().toISOString().split('T')[0], JSON.stringify(lead.historial || []), lead.fecha_seguimiento || null
     ]
   );
   return {
     ...res.rows[0],
     prima_proyectada: parseFloat(res.rows[0].prima_proyectada)
+  };
+}
+
+export async function updateLead(id: string, updatedFields: Partial<Omit<Lead, 'id' | 'id_tenant'>>): Promise<Lead> {
+  const row = await updateTableRecord('leads', id, updatedFields);
+  return {
+    ...row,
+    prima_proyectada: parseFloat(row.prima_proyectada)
   };
 }
 
@@ -800,20 +907,45 @@ export async function updateLeadStatus(id: string, estado: Lead['estado']): Prom
 
 export async function deleteLead(id: string): Promise<void> {
   await initializeDatabase();
-  await pool.query('DELETE FROM leads WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
+  const tenantId = await getRequestTenantId();
+  await pool.query('DELETE FROM leads WHERE id = $1 AND id_tenant = $2', [id, tenantId]);
+}
+
+// CRUD - Aseguradoras
+export async function getAseguradoras(): Promise<Aseguradora[]> {
+  await initializeDatabase();
+  const tenantId = await getRequestTenantId();
+  const res = await pool.query('SELECT * FROM aseguradoras WHERE id_tenant = $1 ORDER BY nombre ASC', [tenantId]);
+  return res.rows;
+}
+
+export async function createAseguradora(aseg: Omit<Aseguradora, 'id' | 'id_tenant'>): Promise<Aseguradora> {
+  await initializeDatabase();
+  const tenantId = await getRequestTenantId();
+  const res = await pool.query(
+    `INSERT INTO aseguradoras (id_tenant, nombre, telefono, ejecutivo, email, direccion) 
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [tenantId, aseg.nombre, aseg.telefono, aseg.ejecutivo, aseg.email, aseg.direccion]
+  );
+  return res.rows[0];
+}
+
+export async function updateAseguradora(id: number, updatedFields: Partial<Omit<Aseguradora, 'id' | 'id_tenant'>>): Promise<Aseguradora> {
+  const row = await updateTableRecord('aseguradoras', String(id), updatedFields);
+  return row;
 }
 
 // CRUD - Claims (Siniestros)
 export async function getClaims(): Promise<Claim[]> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM siniestros WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
   return res.rows;
 }
 
 export async function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha_creacion' | 'bitacora'>): Promise<Claim> {
   await initializeDatabase();
-  const tenantId = activeTenantId;
+  const tenantId = await getRequestTenantId();
 
   const resIds = await pool.query('SELECT id FROM siniestros ORDER BY id DESC LIMIT 1');
   const lastId = resIds.rows[0]?.id;
@@ -851,7 +983,8 @@ export async function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha
 
 export async function addClaimLog(claimId: string, motivo: string, proximo_control: string): Promise<Claim> {
   await initializeDatabase();
-  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, activeTenantId]);
+  const tenantId = await getRequestTenantId();
+  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, tenantId]);
   const claim = resClaims.rows[0];
   if (!claim) throw new Error('Siniestro no encontrado');
 
@@ -870,7 +1003,8 @@ export async function addClaimLog(claimId: string, motivo: string, proximo_contr
 
 export async function updateClaimStatus(claimId: string, estado: Claim['estado']): Promise<Claim> {
   await initializeDatabase();
-  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, activeTenantId]);
+  const tenantId = await getRequestTenantId();
+  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, tenantId]);
   const claim = resClaims.rows[0];
   if (!claim) throw new Error('Siniestro no encontrado');
 

@@ -47,10 +47,11 @@ export async function POST(request: Request) {
     }
     
     if (action === 'addNote') {
+      const { fecha_cumplimiento } = body;
       if (!id || !noteAction || !noteText) {
         return NextResponse.json({ error: 'ID, noteAction y noteText requeridos' }, { status: 400 });
       }
-      await addClientHistory(id, noteAction, noteText);
+      await addClientHistory(id, noteAction, noteText, fecha_cumplimiento);
       return NextResponse.json({ success: true });
     }
     

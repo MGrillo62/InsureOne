@@ -412,6 +412,24 @@ export default function PolizasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [renewalFilterDays, setRenewalFilterDays] = useState<30 | 60 | 90>(30);
 
+  // Aseguradoras Catalog States
+  interface Aseguradora {
+    id: number;
+    nombre: string;
+    telefono: string;
+    ejecutivo: string;
+    email: string;
+    direccion: string;
+  }
+  const [aseguradoras, setAseguradoras] = useState<Aseguradora[]>([]);
+  const [editAseguradoraId, setEditAseguradoraId] = useState<number | null>(null);
+  const [asegNombre, setAsegNombre] = useState('');
+  const [asegTelefono, setAsegTelefono] = useState('');
+  const [asegEjecutivo, setAsegEjecutivo] = useState('');
+  const [asegEmail, setAsegEmail] = useState('');
+  const [asegDireccion, setAsegDireccion] = useState('');
+  const [asegModalOpen, setAsegModalOpen] = useState(false);
+
   // Bulk Upload States
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [filePreviewData, setFilePreviewData] = useState<any[]>([]);
@@ -477,6 +495,64 @@ export default function PolizasPage() {
   const [comisionTotal, setComisionTotal] = useState(0);
   const [mathFlash, setMathFlash] = useState(false);
 
+  const fetchAseguradoras = async () => {
+    try {
+      const res = await fetch('/api/aseguradoras');
+      if (res.ok) {
+        const data = await res.json();
+        setAseguradoras(data);
+      }
+    } catch (err) {
+      console.error('Error fetching aseguradoras:', err);
+    }
+  };
+
+  const handleEditAseguradora = (a: Aseguradora) => {
+    setEditAseguradoraId(a.id);
+    setAsegNombre(a.nombre);
+    setAsegTelefono(a.telefono);
+    setAsegEjecutivo(a.ejecutivo);
+    setAsegEmail(a.email);
+    setAsegDireccion(a.direccion);
+    setAsegModalOpen(true);
+  };
+
+  const handleSubmitAseguradora = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editAseguradoraId || !asegNombre || !asegTelefono || !asegEjecutivo || !asegEmail || !asegDireccion) {
+      alert('Todos los campos son requeridos');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/aseguradoras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          id: editAseguradoraId,
+          nombre: asegNombre,
+          telefono: asegTelefono,
+          ejecutivo: asegEjecutivo,
+          email: asegEmail,
+          direccion: asegDireccion
+        })
+      });
+
+      if (res.ok) {
+        await fetchAseguradoras();
+        setAsegModalOpen(false);
+        setEditAseguradoraId(null);
+      } else {
+        const data = await res.json();
+        alert(`Error al actualizar aseguradora: ${data.error || 'Error desconocido'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al actualizar aseguradora');
+    }
+  };
+
   // Load Policies and Clients
   const fetchData = async () => {
     try {
@@ -490,6 +566,7 @@ export default function PolizasPage() {
         const cliData = await cliRes.json();
         setClients(cliData);
       }
+      await fetchAseguradoras();
     } catch (err) {
       console.error(err);
     }
@@ -887,7 +964,18 @@ export default function PolizasPage() {
                   paginatedPolicies.map((p) => {
                     const client = clients.find(c => c.id === p.id_cliente);
                     return (
-                      <tr key={p.id}>
+                      <tr 
+                        key={p.id}
+                        tabIndex={0}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => handleEditPolicy(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleEditPolicy(p);
+                          }
+                        }}
+                      >
                         <td style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{p.numero_poliza}</td>
                         <td>
                           {client ? (
@@ -923,7 +1011,10 @@ export default function PolizasPage() {
                           <button 
                             className="btn btn-secondary btn-sm"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => handleEditPolicy(p)}
+                            onClick={(e) => {
+                              e.stopPropagation(); // Evitar doble ejecución por el click en tr
+                              handleEditPolicy(p);
+                            }}
                           >
                             <Edit2 size={12} />
                             Editar
@@ -967,36 +1058,60 @@ export default function PolizasPage() {
       {/* RENDER CATALOGUE TAB */}
       {activeTab === 'catalogo' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-          {ASEGURADORAS_CATALOGO.map((a, i) => (
-            <div key={i} className="premium-card animate-slide-in" style={{ margin: 0 }}>
-              <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Building2 size={18} />
-                </div>
-                <h2 style={{ fontSize: '15px' }}>{a.nombre}</h2>
-              </div>
-              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Phone size={14} style={{ color: '#64748B' }} />
-                  <span style={{ fontSize: '13px', fontWeight: 600 }}>Emergencias: {a.telefono}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Mail size={14} style={{ color: '#64748B' }} />
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>EJECUTIVO DE CUENTA</div>
-                    <span style={{ fontSize: '13px' }}>{a.ejecutivo} ({a.email})</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <MapPin size={14} style={{ color: '#64748B', marginTop: '3px' }} />
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>OFICINA PRINCIPAL</div>
-                    <span style={{ fontSize: '12.5px', color: '#475569' }}>{a.direccion}</span>
-                  </div>
-                </div>
-              </div>
+          {aseguradoras.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+              Cargando aseguradoras...
             </div>
-          ))}
+          ) : (
+            aseguradoras.map((a) => (
+              <div 
+                key={a.id} 
+                className="premium-card animate-slide-in" 
+                style={{ 
+                  margin: 0, 
+                  cursor: 'pointer', 
+                  transition: 'transform 0.2s, box-shadow 0.2s', 
+                  border: '1px solid #E2E8F0' 
+                }}
+                onClick={() => handleEditAseguradora(a)}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Building2 size={18} />
+                  </div>
+                  <h2 style={{ fontSize: '15px' }}>{a.nombre}</h2>
+                </div>
+                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Phone size={14} style={{ color: '#64748B' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 600 }}>Emergencias: {a.telefono}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Mail size={14} style={{ color: '#64748B' }} />
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8' }}>EJECUTIVO DE CUENTA</div>
+                      <span style={{ fontSize: '13px' }}>{a.ejecutivo} ({a.email})</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <MapPin size={14} style={{ color: '#64748B', marginTop: '3px' }} />
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8' }}>OFICINA PRINCIPAL</div>
+                      <span style={{ fontSize: '12.5px', color: '#475569' }}>{a.direccion}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
@@ -1082,10 +1197,17 @@ export default function PolizasPage() {
                     <div className="form-group">
                       <label className="form-label">Aseguradora</label>
                       <select className="form-input" value={compania} onChange={(e) => setCompania(e.target.value)}>
-                        <option value="Rimac">Rimac</option>
-                        <option value="Pacifico">Pacífico</option>
-                        <option value="Mapfre">Mapfre</option>
-                        <option value="La Positiva">La Positiva</option>
+                        {aseguradoras.map(a => (
+                          <option key={a.id} value={a.nombre}>{a.nombre}</option>
+                        ))}
+                        {aseguradoras.length === 0 && (
+                          <>
+                            <option value="Rimac">Rimac</option>
+                            <option value="Pacifico">Pacífico</option>
+                            <option value="Mapfre">Mapfre</option>
+                            <option value="La Positiva">La Positiva</option>
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -1177,6 +1299,7 @@ export default function PolizasPage() {
                           setShowCoverageDropdown(true);
                         }}
                         onFocus={() => setShowCoverageDropdown(true)}
+                        onClick={() => setShowCoverageDropdown(true)}
                         onBlur={() => setTimeout(() => setShowCoverageDropdown(false), 250)}
                       />
                       <button 
@@ -1539,6 +1662,76 @@ export default function PolizasPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT INSURER MODAL */}
+      {asegModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Editar Aseguradora</h3>
+              <button className="modal-close-btn" onClick={() => { setAsegModalOpen(false); setEditAseguradoraId(null); }}>&times;</button>
+            </div>
+            <form onSubmit={handleSubmitAseguradora}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="form-group">
+                  <label className="form-label">Nombre de la Aseguradora *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={asegNombre} 
+                    onChange={(e) => setAsegNombre(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Teléfono de Emergencias *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={asegTelefono} 
+                    onChange={(e) => setAsegTelefono(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Ejecutivo de Cuenta *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={asegEjecutivo} 
+                    onChange={(e) => setAsegEjecutivo(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email del Ejecutivo *</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    value={asegEmail} 
+                    onChange={(e) => setAsegEmail(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Oficina Principal *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={asegDireccion} 
+                    onChange={(e) => setAsegDireccion(e.target.value)} 
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setAsegModalOpen(false); setEditAseguradoraId(null); }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Guardar Cambios</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

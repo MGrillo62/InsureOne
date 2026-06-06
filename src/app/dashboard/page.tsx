@@ -30,7 +30,7 @@ interface DashboardMetrics {
 
 interface AlertItem {
   id: string;
-  tipo: 'poliza' | 'cuota';
+  tipo: 'poliza' | 'cuota' | 'lead';
   descripcion: string;
   detalle: string;
   fecha: string;
@@ -53,6 +53,28 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isDateInCurrentWeek = (dateStr: string): boolean => {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return false;
+    
+    const leadDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const today = new Date();
+    
+    // Domingo de la semana actual
+    const startOfWeek = new Date(today);
+    const day = today.getDay();
+    startOfWeek.setDate(today.getDate() - day);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Sábado de la semana actual
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    return leadDate >= startOfWeek && leadDate <= endOfWeek;
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -66,11 +88,13 @@ export default function DashboardPage() {
       const polRes = await fetch('/api/polizas');
       const schRes = await fetch('/api/cronograma');
       const cliRes = await fetch('/api/clientes');
+      const leadsRes = await fetch('/api/leads');
 
-      if (polRes.ok && schRes.ok && cliRes.ok) {
+      if (polRes.ok && schRes.ok && cliRes.ok && leadsRes.ok) {
         const policies = await polRes.json();
         const schedules = await schRes.json();
         const clients = await cliRes.json();
+        const leads = await leadsRes.json();
 
         const alertList: AlertItem[] = [];
 
@@ -105,6 +129,23 @@ export default function DashboardPage() {
             });
           }
         });
+
+        // 3. Check for leads follow-up in the current week
+        leads.forEach((l: any) => {
+          if (l.fecha_seguimiento && isDateInCurrentWeek(l.fecha_seguimiento)) {
+            alertList.push({
+              id: `lead-${l.id}`,
+              tipo: 'lead',
+              descripcion: 'Seguimiento de Prospecto',
+              detalle: `El prospecto ${l.nombre} tiene fecha de seguimiento programada para el ${formatDateToLocal(l.fecha_seguimiento)}.`,
+              fecha: l.fecha_seguimiento,
+              estado: 'info'
+            });
+          }
+        });
+
+        // Ordenar las alertas por fecha (más antiguas/vencidas primero)
+        alertList.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
         setAlerts(alertList.slice(0, 5)); // cap to 5 urgent alerts
       }
@@ -358,7 +399,11 @@ export default function DashboardPage() {
                       width: '10px', 
                       height: '10px', 
                       borderRadius: '50%', 
-                      backgroundColor: alert.estado === 'danger' ? 'var(--color-danger)' : 'var(--color-warning)' 
+                      backgroundColor: alert.estado === 'danger' 
+                        ? 'var(--color-danger)' 
+                        : alert.estado === 'info' 
+                          ? '#3B82F6' 
+                          : 'var(--color-warning)' 
                     }} 
                   />
                   <div>
@@ -374,7 +419,15 @@ export default function DashboardPage() {
                     </span>
                   )}
                   <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>Vence: {formatDateToLocal(alert.fecha)}</span>
-                  <Link href={alert.tipo === 'cuota' ? '/dashboard/finanzas' : '/dashboard/polizas'} className="btn-card-action">
+                  <Link 
+                    href={alert.tipo === 'cuota' 
+                      ? '/dashboard/finanzas' 
+                      : alert.tipo === 'lead' 
+                        ? '/dashboard/leads' 
+                        : '/dashboard/polizas'
+                    } 
+                    className="btn-card-action"
+                  >
                     <ChevronRight size={16} />
                   </Link>
                 </div>

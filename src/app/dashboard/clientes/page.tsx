@@ -65,6 +65,7 @@ export default function CRMClientesPage() {
   // Interaction Note Form
   const [noteAction, setNoteAction] = useState('Llamada Telefónica');
   const [noteText, setNoteText] = useState('');
+  const [fechaCumplimiento, setFechaCumplimiento] = useState('');
 
   const fetchClients = async (selectIdAfterFetch?: string) => {
     try {
@@ -135,11 +136,13 @@ export default function CRMClientesPage() {
           action: 'addNote',
           id: selectedClient.id,
           noteAction,
-          noteText
+          noteText,
+          fecha_cumplimiento: fechaCumplimiento || undefined
         })
       });
       if (res.ok) {
         setNoteText('');
+        setFechaCumplimiento('');
         fetchClients(selectedClient.id);
       }
     } catch (err) {
@@ -486,7 +489,7 @@ export default function CRMClientesPage() {
                   {/* Timeline Logs */}
                   <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px' }}>
                     <div className="timeline">
-                      {selectedClient.historial.map((log, index) => (
+                      {selectedClient.historial.map((log: any, index) => (
                         <div key={index} className="timeline-item">
                           <div className="timeline-item-indicator" />
                           <div className="timeline-item-content">
@@ -497,6 +500,12 @@ export default function CRMClientesPage() {
                               <span className="timeline-item-time">{log.fecha}</span>
                             </div>
                             <p className="timeline-item-desc">{log.nota}</p>
+                            {log.fecha_cumplimiento && (
+                              <div style={{ fontSize: '11px', color: '#B45309', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+                                Cumplimiento programado: {log.fecha_cumplimiento}
+                              </div>
+                            )}
                             <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: 'right' }}>
                               Registrado por: {log.usuario}
                             </div>
@@ -508,9 +517,9 @@ export default function CRMClientesPage() {
 
                   {/* Add note Form */}
                   <form onSubmit={handleAddNote} style={{ background: '#F8FAFC', padding: '14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '10px', marginBottom: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr 1.2fr', gap: '10px', marginBottom: '10px' }}>
                       <div>
-                        <label className="form-label" style={{ fontSize: '12px' }}>Acción</label>
+                        <label className="form-label" style={{ fontSize: '12.2px' }}>Acción</label>
                         <select className="form-input" style={{ padding: '6px 10px', fontSize: '12.5px' }} value={noteAction} onChange={(e) => setNoteAction(e.target.value)}>
                           <option value="Llamada Telefónica">Llamada Telefónica</option>
                           <option value="Envío de Correo">Envío de Correo</option>
@@ -520,15 +529,25 @@ export default function CRMClientesPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="form-label" style={{ fontSize: '12px' }}>Comentario de Gestión</label>
+                        <label className="form-label" style={{ fontSize: '12.2px' }}>Comentario de Gestión</label>
                         <input 
                           type="text" 
-                          placeholder="Ingrese detalles de la interacción..." 
+                          placeholder="Ingrese detalles..." 
                           className="form-input" 
                           style={{ padding: '6px 10px', fontSize: '12.5px' }}
                           value={noteText}
                           onChange={(e) => setNoteText(e.target.value)}
                           required 
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '12.2px' }}>Cumplimiento (Opc.)</label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          value={fechaCumplimiento}
+                          onChange={(e) => setFechaCumplimiento(e.target.value)}
                         />
                       </div>
                     </div>
