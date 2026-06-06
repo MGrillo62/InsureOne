@@ -3,7 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 // PostgreSQL connection pool
-const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_Ov0Btlc8ikQH@ep-lingering-waterfall-aplth6rs-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL no está definida en las variables de entorno (.env o .env.local)');
+}
 const pool = new Pool({
   connectionString,
   ssl: {
