@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   FileText, 
   Search, 
@@ -17,7 +18,10 @@ import {
   ArrowUp,
   ArrowDown,
   Edit2,
-  ChevronDown
+  ChevronDown,
+  Upload,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 
 interface Client {
@@ -90,11 +94,331 @@ export default function PolizasPage() {
     return dateStr;
   };
 
+  const parseExcelDate = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return date.toISOString().split('T')[0];
+    }
+    const str = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+      const parts = str.split('/');
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+    return '';
+  };
+
+  const downloadExcelTemplate = () => {
+    const headers = [
+      'Cliente Tipo', 'Cliente Nombre', 'Cliente Doc Tipo', 'Cliente Doc Número', 
+      'Cliente Email', 'Cliente Teléfono', 'Cliente Dirección', 
+      'Aseguradora', 'Ramo', 'Número de Póliza', 'Suma Asegurada', 
+      'Moneda', 'Prima Neta', 'Porcentaje Comisión', 'Periodicidad', 
+      'Cuotas', 'Fecha de Inicio', 'Fecha de Fin', 'Coberturas', 'Deducibles'
+    ];
+    const sampleRow1 = [
+      'natural', 'Juan Pérez', 'DNI', '44445555', 
+      'juan.perez@email.com', '999111222', 'Av. Arequipa 1122, Miraflores', 
+      'Rimac', 'Vehicular', 'CAR-12345-2026', 15000, 
+      'USD', 650.00, 15, 'Anual', 4, 
+      '2026-06-06', '2027-06-06', 
+      'Daño Propio, Responsabilidad Civil', 'Deducible general USD 150, Copago 10%'
+    ];
+    const sampleRow2 = [
+      'juridica', 'Agroindustrias S.A.', 'RUC', '20601122334', 
+      'contacto@agroindustrias.com', '014445555', 'Av. Industrial 456, Ate', 
+      'Pacífico', 'SCTR', 'SCTR-9988-2026', 50000, 
+      'PEN', 1200.00, 10, 'Mensual', 12, 
+      '2026-06-15', '', 
+      'Accidentes de Trabajo, Invalidez, Muerte', 'Deducible USD 100, Copago 15%, Deducible lunas 10%'
+    ];
+    const wsData = [headers, sampleRow1, sampleRow2];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Carga');
+    XLSX.writeFile(wb, 'plantilla_carga_polizas.xlsx');
+  };
+
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFilePreviewData([]);
+    setUploadErrors([]);
+    setUploadProgress(0);
+    setUploadResults(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+        if (rows.length <= 1) {
+          setUploadErrors(['El archivo no contiene filas de datos para procesar.']);
+          return;
+        }
+
+        const previewList: any[] = [];
+        const errorsList: string[] = [];
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0 || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
+            continue;
+          }
+
+          const lineNum = i + 1;
+
+          const valAt = (idx: number) => {
+            const val = row[idx];
+            return val !== undefined && val !== null ? String(val).trim() : '';
+          };
+
+          const rawNumAt = (idx: number) => {
+            const val = row[idx];
+            return typeof val === 'number' ? val : Number(val);
+          };
+
+          const cliTipo = valAt(0).toLowerCase();
+          const cliNombre = valAt(1);
+          const cliDocTipo = valAt(2).toUpperCase();
+          const cliDocNum = valAt(3);
+          const cliEmail = valAt(4);
+          const cliTelefono = valAt(5);
+          const cliDireccion = valAt(6);
+
+          const companiaAseg = valAt(7);
+          const ramoSeguro = valAt(8);
+          const nroPoliza = valAt(9);
+          const sumaAseg = rawNumAt(10) || 0;
+          const monedaContrato = valAt(11).toUpperCase() || 'USD';
+          const netPremium = rawNumAt(12) || 0;
+          const comisionPct = rawNumAt(13) || 15;
+          const period = valAt(14) || 'Anual';
+          const nroCuotas = rawNumAt(15) || 4;
+          const startD = parseExcelDate(row[16]);
+          const endD = parseExcelDate(row[17]);
+          const cobList = valAt(18);
+          const dedList = valAt(19);
+
+          // Validation Rules
+          if (!cliNombre) errorsList.push(`Fila ${lineNum}: Nombre del Cliente es requerido.`);
+          if (!cliDocTipo || !['DNI', 'RUC', 'CE'].includes(cliDocTipo)) {
+            errorsList.push(`Fila ${lineNum}: Tipo de Documento de cliente inválido o vacío (debe ser DNI, RUC o CE).`);
+          }
+          if (!cliDocNum) errorsList.push(`Fila ${lineNum}: Número de Documento es requerido.`);
+          if (cliTipo && !['natural', 'juridica'].includes(cliTipo)) {
+            errorsList.push(`Fila ${lineNum}: Tipo de Cliente inválido (debe ser 'natural' o 'juridica').`);
+          }
+
+          if (!companiaAseg) errorsList.push(`Fila ${lineNum}: Compañía Aseguradora es requerida.`);
+          if (!ramoSeguro) errorsList.push(`Fila ${lineNum}: Ramo es requerido.`);
+          if (!nroPoliza) errorsList.push(`Fila ${lineNum}: Número de Póliza es requerido.`);
+          if (isNaN(netPremium) || netPremium <= 0) errorsList.push(`Fila ${lineNum}: Prima Neta debe ser un número positivo.`);
+          if (isNaN(comisionPct) || comisionPct < 0 || comisionPct > 100) {
+            errorsList.push(`Fila ${lineNum}: Porcentaje de Comisión debe estar entre 0 y 100.`);
+          }
+          if (!['USD', 'PEN'].includes(monedaContrato)) {
+            errorsList.push(`Fila ${lineNum}: Moneda debe ser USD o PEN.`);
+          }
+          if (!['Anual', 'Semestral', 'Mensual'].includes(period)) {
+            errorsList.push(`Fila ${lineNum}: Periodicidad debe ser Anual, Semestral o Mensual.`);
+          }
+          if (![1, 2, 4, 12].includes(nroCuotas)) {
+            errorsList.push(`Fila ${lineNum}: El número de cuotas debe ser 1, 2, 4 o 12.`);
+          }
+          if (!startD) {
+            errorsList.push(`Fila ${lineNum}: Fecha de Inicio de póliza es requerida y debe tener formato YYYY-MM-DD.`);
+          }
+
+          const clientExists = clients.some(c => c.documento_numero === cliDocNum);
+
+          previewList.push({
+            linea: lineNum,
+            cliente: {
+              tipo: cliTipo || 'natural',
+              nombre: cliNombre,
+              documento_tipo: cliDocTipo,
+              documento_numero: cliDocNum,
+              email: cliEmail || `${cliDocNum.toLowerCase()}@insureone-mail.com`,
+              telefono: cliTelefono || '999999999',
+              direccion: cliDireccion || 'Dirección no especificada',
+              existe: clientExists
+            },
+            poliza: {
+              compania_aseguradora: companiaAseg,
+              ramo: ramoSeguro,
+              numero_poliza: nroPoliza,
+              suma_asegurada: sumaAseg,
+              moneda: monedaContrato,
+              prima_neta: netPremium,
+              porcentaje_comision: comisionPct,
+              periodicidad: period,
+              cuotas: nroCuotas,
+              fecha_inicio: startD,
+              fecha_fin: endD,
+              coberturas: cobList,
+              deducibles: dedList
+            }
+          });
+        }
+
+        setUploadErrors(errorsList);
+        setFilePreviewData(previewList);
+      } catch (err) {
+        console.error(err);
+        setUploadErrors(['Error al leer el archivo Excel. Asegúrese de que el formato sea válido.']);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const processBulkUpload = async () => {
+    if (filePreviewData.length === 0 || uploadErrors.length > 0) return;
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    let importadasCount = 0;
+    let creadosCount = 0;
+
+    const localClientsMap = new Map<string, string>();
+    clients.forEach(c => localClientsMap.set(c.documento_numero, c.id));
+
+    try {
+      for (let i = 0; i < filePreviewData.length; i++) {
+        const item = filePreviewData[i];
+        
+        let clientDbId = localClientsMap.get(item.cliente.documento_numero);
+        
+        if (!clientDbId) {
+          const cliRes = await fetch('/api/clientes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'create',
+              tipo: item.cliente.tipo,
+              nombre: item.cliente.nombre,
+              documento_tipo: item.cliente.documento_tipo,
+              documento_numero: item.cliente.documento_numero,
+              email: item.cliente.email,
+              telefono: item.cliente.telefono,
+              direccion: item.cliente.direccion
+            })
+          });
+
+          if (cliRes.ok) {
+            const cliData = await cliRes.json();
+            clientDbId = cliData.client.id;
+            localClientsMap.set(item.cliente.documento_numero, clientDbId!);
+            creadosCount++;
+          } else {
+            throw new Error(`No se pudo crear el cliente para la fila ${item.linea}`);
+          }
+        }
+
+        const net = Number(item.poliza.prima_neta);
+        const emis = Number((net * 0.03).toFixed(2));
+        const sub = Number((net + emis).toFixed(2));
+        const tax = Number((sub * 0.18).toFixed(2));
+        const tot = Number((sub + tax).toFixed(2));
+        const com = Number((net * (item.poliza.porcentaje_comision / 100)).toFixed(2));
+
+        let endD = item.poliza.fecha_fin;
+        if (!endD) {
+          const start = new Date(item.poliza.fecha_inicio);
+          const end = new Date(start);
+          if (item.poliza.periodicidad === 'Anual') {
+            end.setFullYear(start.getFullYear() + 1);
+          } else if (item.poliza.periodicidad === 'Semestral') {
+            end.setMonth(start.getMonth() + 6);
+          } else if (item.poliza.periodicidad === 'Mensual') {
+            end.setMonth(start.getMonth() + 1);
+          }
+          endD = end.toISOString().split('T')[0];
+        }
+
+        const polRes = await fetch('/api/polizas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create',
+            id_cliente: clientDbId,
+            compania_aseguradora: item.poliza.compania_aseguradora,
+            ramo: item.poliza.ramo,
+            numero_poliza: item.poliza.numero_poliza,
+            suma_asegurada: item.poliza.suma_asegurada,
+            deducibles: item.poliza.deducibles,
+            coberturas: item.poliza.coberturas,
+            prima_neta: net,
+            gastos_emision: emis,
+            igv: tax,
+            prima_total: tot,
+            porcentaje_comision: item.poliza.porcentaje_comision,
+            comision_total: com,
+            fecha_inicio: item.poliza.fecha_inicio,
+            fecha_fin: endD,
+            moneda: item.poliza.moneda,
+            periodicidad: item.poliza.periodicidad,
+            installments: item.poliza.cuotas
+          })
+        });
+
+        if (polRes.ok) {
+          importadasCount++;
+        } else {
+          throw new Error(`No se pudo crear la póliza para la fila ${item.linea}`);
+        }
+
+        const progress = Math.round(((i + 1) / filePreviewData.length) * 100);
+        setUploadProgress(progress);
+      }
+
+      await fetchData();
+
+      setUploadResults({
+        polizasImportadas: importadasCount,
+        clientesCreados: creadosCount
+      });
+    } catch (err: any) {
+      console.error(err);
+      alert(`Error durante el proceso de carga masiva: ${err.message || 'Error desconocido'}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCloseUploadModal = () => {
+    setUploadModalOpen(false);
+    setFilePreviewData([]);
+    setUploadErrors([]);
+    setUploadProgress(0);
+    setUploading(false);
+    setUploadResults(null);
+  };
+
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [activeTab, setActiveTab] = useState<'lista' | 'catalogo' | 'renovaciones'>('lista');
   const [searchTerm, setSearchTerm] = useState('');
   const [renewalFilterDays, setRenewalFilterDays] = useState<30 | 60 | 90>(30);
+
+  // Bulk Upload States
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [filePreviewData, setFilePreviewData] = useState<any[]>([]);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<{ polizasImportadas: number; clientesCreados: number } | null>(null);
 
   // Sorting
   const [sortField, setSortField] = useState<keyof Policy>('numero_poliza');
@@ -440,10 +764,16 @@ export default function PolizasPage() {
             Registra pólizas intermediadas, calcula comisiones del bróker y administra cronogramas de renovación.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)}>
-          <Plus size={16} />
-          Registrar Póliza
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn btn-secondary" onClick={() => setUploadModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Upload size={16} />
+            Carga Masiva
+          </button>
+          <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={16} />
+            Registrar Póliza
+          </button>
+        </div>
       </div>
 
       {/* Tabs Navigation */}
@@ -1037,6 +1367,178 @@ export default function PolizasPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* BULK UPLOAD EXCEL MODAL */}
+      {uploadModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content large" style={{ maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Upload size={20} style={{ color: '#2563EB' }} />
+                Carga Masiva de Pólizas
+              </h3>
+              <button className="modal-close-btn" onClick={handleCloseUploadModal} disabled={uploading}>&times;</button>
+            </div>
+            
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '24px' }}>
+              <p style={{ color: '#64748B', fontSize: '14px', marginBottom: '16px' }}>
+                Carga pólizas y asegurados masivamente. Si el asegurado no existe (evaluado por su número de documento), el sistema lo registrará automáticamente.
+              </p>
+
+              {/* Template Download Option */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '12px 16px', borderRadius: '8px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
+                <div>
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155' }}>¿No tienes el formato de Excel?</span>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Descarga la plantilla con ejemplos listos para rellenar.</span>
+                </div>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={downloadExcelTemplate}
+                  disabled={uploading}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <FileText size={14} />
+                  Descargar Formato Excel
+                </button>
+              </div>
+
+              {/* File Upload Zone */}
+              {!uploadResults && (
+                <div style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '30px', textAlign: 'center', backgroundColor: '#F8FAFC', marginBottom: '20px', cursor: 'pointer', transition: 'border-color 0.2s', position: 'relative' }}>
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    onChange={handleExcelFileUpload}
+                    disabled={uploading}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+                  />
+                  <Upload size={36} style={{ color: '#94A3B8', marginBottom: '10px' }} />
+                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#475569' }}>
+                    Selecciona o arrastra tu archivo Excel
+                  </span>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+                    Formatos soportados: .xlsx, .xls
+                  </span>
+                </div>
+              )}
+
+              {/* Progress Indicator */}
+              {uploading && (
+                <div style={{ marginBottom: '20px', background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>
+                    <span>Procesando registros en base de datos...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '10px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div style={{ width: `${uploadProgress}%`, height: '100%', backgroundColor: '#2563EB', transition: 'width 0.2s ease-in-out', borderRadius: '999px' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Success Results */}
+              {uploadResults && (
+                <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '12px', padding: '24px', textAlign: 'center', marginBottom: '20px', color: '#065F46' }}>
+                  <CheckCircle size={40} style={{ color: '#10B981', margin: '0 auto 12px' }} />
+                  <h4 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>¡Carga Masiva Exitosa!</h4>
+                  <p style={{ fontSize: '14px', margin: 0, lineHeight: 1.5 }}>
+                    Se importaron correctamente <strong>{uploadResults.polizasImportadas}</strong> pólizas de seguro y se crearon <strong>{uploadResults.clientesCreados}</strong> nuevos asegurados en el sistema.
+                  </p>
+                </div>
+              )}
+
+              {/* Validation Errors */}
+              {uploadErrors.length > 0 && (
+                <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '16px', marginBottom: '20px', color: '#991B1B' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '14px', marginBottom: '8px' }}>
+                    <XCircle size={16} />
+                    Se detectaron errores en el archivo Excel:
+                  </div>
+                  <ul style={{ fontSize: '13px', paddingLeft: '20px', margin: 0, maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {uploadErrors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#B91C1C', marginTop: '10px', fontWeight: 600 }}>
+                    Por favor, corrija los errores descritos arriba y vuelva a cargar el archivo.
+                  </span>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              {filePreviewData.length > 0 && uploadErrors.length === 0 && !uploadResults && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ fontSize: '13.5px', fontWeight: 600, color: '#1E293B', marginBottom: '10px' }}>Previsualización de Registros Detectados ({filePreviewData.length})</h4>
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                    <table className="premium-table" style={{ fontSize: '12px', margin: 0 }}>
+                      <thead>
+                        <tr style={{ position: 'sticky', top: 0, backgroundColor: '#FFFFFF', zIndex: 1 }}>
+                          <th>Fila</th>
+                          <th>Nro Póliza</th>
+                          <th>Cliente</th>
+                          <th>Aseguradora</th>
+                          <th>Ramo</th>
+                          <th>Prima Neta</th>
+                          <th>Cuotas</th>
+                          <th>Cliente Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filePreviewData.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>{item.linea}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{item.poliza.numero_poliza}</td>
+                            <td>
+                              <div>
+                                <div style={{ fontWeight: 500 }}>{item.cliente.nombre}</div>
+                                <div style={{ fontSize: '10px', color: '#64748B' }}>{item.cliente.documento_tipo}: {item.cliente.documento_numero}</div>
+                              </div>
+                            </td>
+                            <td>{item.poliza.compania_aseguradora}</td>
+                            <td>{item.poliza.ramo}</td>
+                            <td style={{ fontWeight: 600 }}>
+                              {formatCurrency(item.poliza.prima_neta, item.poliza.moneda)}
+                            </td>
+                            <td>{item.poliza.cuotas}</td>
+                            <td>
+                              {item.cliente.existe ? (
+                                <span className="badge" style={{ backgroundColor: '#F1F5F9', color: '#475569', fontSize: '10px', padding: '2px 6px' }}>Existente</span>
+                              ) : (
+                                <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 6px' }}>¡Crear Nuevo!</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ flexShrink: 0 }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleCloseUploadModal} 
+                disabled={uploading}
+              >
+                {uploadResults ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!uploadResults && (
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={processBulkUpload}
+                  disabled={uploading || filePreviewData.length === 0 || uploadErrors.length > 0}
+                >
+                  {uploading ? `Subiendo...` : 'Iniciar Carga'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

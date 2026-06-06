@@ -3,7 +3,7 @@ import { getPolicies, createPolicy, updatePolicy } from '@/lib/db';
 
 export async function GET() {
   try {
-    const policies = getPolicies();
+    const policies = await getPolicies();
     return NextResponse.json(policies);
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener pólizas' }, { status: 500 });
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Campos requeridos faltantes' }, { status: 400 });
       }
       
-      const { policy, schedule } = createPolicy({
+      const { policy, schedule } = await createPolicy({
         id_cliente,
         compania_aseguradora,
         ramo,
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       if (!id) {
         return NextResponse.json({ error: 'ID requerido para actualizar' }, { status: 400 });
       }
-      const updated = updatePolicy(id, {
+      const updated = await updatePolicy(id, {
         compania_aseguradora,
         ramo,
         numero_poliza,

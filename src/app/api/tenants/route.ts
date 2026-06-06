@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getTenants, getActiveTenantId, setActiveTenantId, readDB, writeDB, createTenant, updateTenant } from '@/lib/db';
+import { 
+  getTenants, 
+  getActiveTenantId, 
+  setActiveTenantId, 
+  createTenant, 
+  updateTenant, 
+  getTenantPagos, 
+  createTenantPago 
+} from '@/lib/db';
 
 export async function GET() {
   try {
-    const tenants = getTenants();
-    const activeTenantId = getActiveTenantId();
+    const tenants = await getTenants();
+    const activeTenantId = await getActiveTenantId();
     return NextResponse.json({ tenants, activeTenantId });
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener tenants' }, { status: 500 });
@@ -14,13 +22,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, activeTenantId, id, tenant } = body;
+    const { action, activeTenantId, id, tenant, pago } = body;
     
     if (action === 'create') {
       if (!tenant || !tenant.nombre) {
         return NextResponse.json({ error: 'Nombre de tenant es requerido' }, { status: 400 });
       }
-      const newTenant = createTenant(tenant);
+      const newTenant = await createTenant(tenant);
       return NextResponse.json({ success: true, tenant: newTenant });
     }
     
@@ -28,8 +36,31 @@ export async function POST(request: Request) {
       if (!id || !tenant) {
         return NextResponse.json({ error: 'ID y datos de tenant son requeridos' }, { status: 400 });
       }
-      const updatedTenant = updateTenant(id, tenant);
+      const updatedTenant = await updateTenant(id, tenant);
       return NextResponse.json({ success: true, tenant: updatedTenant });
+    }
+
+    if (action === 'getPagos') {
+      if (!id) {
+        return NextResponse.json({ error: 'ID de tenant es requerido' }, { status: 400 });
+      }
+      const pagos = await getTenantPagos(id);
+      return NextResponse.json({ success: true, pagos });
+    }
+
+    if (action === 'createPago') {
+      if (!id || !pago || !pago.monto || !pago.fecha_pago) {
+        return NextResponse.json({ error: 'ID de tenant y datos de pago son requeridos' }, { status: 400 });
+      }
+      const newPago = await createTenantPago({
+        id_tenant: id,
+        monto: Number(pago.monto),
+        fecha_pago: pago.fecha_pago,
+        metodo_pago: pago.metodo_pago,
+        estado: pago.estado || 'Pagado',
+        comprobante_nro: pago.comprobante_nro || ''
+      });
+      return NextResponse.json({ success: true, pago: newPago });
     }
     
     // Default: Switch active tenant
@@ -38,12 +69,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ID de tenant requerido' }, { status: 400 });
     }
     
-    setActiveTenantId(tId);
-    
-    // Update currentUser tenant context
-    const db = readDB();
-    db.currentUser.id_tenant = tId;
-    writeDB(db);
+    await setActiveTenantId(tId);
     
     return NextResponse.json({ success: true, activeTenantId: tId });
   } catch (error) {

@@ -27,6 +27,8 @@ interface Tenant {
   fecha_inicio: string;
   fecha_fin: string;
   logo_url?: string;
+  admin_email?: string;
+  admin_password?: string;
 }
 
 export default function ConfiguracionPage() {
@@ -38,6 +40,7 @@ export default function ConfiguracionPage() {
   // Modal and Form States
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
+  const [modalTab, setModalTab] = useState<'datos' | 'pagos'>('datos');
 
   // Form Fields
   const [nombre, setNombre] = useState('');
@@ -48,6 +51,20 @@ export default function ConfiguracionPage() {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+
+  // Admin Credentials Fields
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+
+  // Subscription Payments States
+  const [pagos, setPagos] = useState<any[]>([]);
+  const [loadingPagos, setLoadingPagos] = useState(false);
+  const [pagoMonto, setPagoMonto] = useState('');
+  const [pagoFecha, setPagoFecha] = useState('');
+  const [pagoMetodo, setPagoMetodo] = useState('Tarjeta de Crédito');
+  const [pagoEstado, setPagoEstado] = useState<'Pagado' | 'Pendiente' | 'Fallido'>('Pagado');
+  const [pagoComprobante, setPagoComprobante] = useState('');
+  const [showRegPagoForm, setShowRegPagoForm] = useState(false);
 
   const fetchTenants = async () => {
     try {
@@ -62,6 +79,28 @@ export default function ConfiguracionPage() {
       console.error('Error fetching tenants:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPagos = async (tenantId: string) => {
+    try {
+      setLoadingPagos(true);
+      const res = await fetch('/api/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'getPagos',
+          id: tenantId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPagos(data.pagos || []);
+      }
+    } catch (err) {
+      console.error('Error fetching pagos:', err);
+    } finally {
+      setLoadingPagos(false);
     }
   };
 
@@ -89,6 +128,9 @@ export default function ConfiguracionPage() {
     setFechaInicio(t.fecha_inicio || '');
     setFechaFin(t.fecha_fin || '');
     setLogoUrl(t.logo_url || '');
+    setAdminEmail(t.admin_email || '');
+    setAdminPassword(t.admin_password || '');
+    setModalTab('datos');
     setModalOpen(true);
   };
 
@@ -99,6 +141,8 @@ export default function ConfiguracionPage() {
     setRuc('');
     setEstado('Activo');
     setSuscripcionTipo('Anual');
+    setAdminEmail('');
+    setAdminPassword('');
     
     // Set default dates
     const today = new Date().toISOString().split('T')[0];
@@ -109,12 +153,19 @@ export default function ConfiguracionPage() {
     setFechaInicio(today);
     setFechaFin(end);
     setLogoUrl('');
+    setModalTab('datos');
     setModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setModalOpen(false);
     setEditingTenantId(null);
+    setModalTab('datos');
+    setPagos([]);
+    setPagoMonto('');
+    setPagoFecha('');
+    setPagoComprobante('');
+    setShowRegPagoForm(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,7 +198,9 @@ export default function ConfiguracionPage() {
           suscripcion_tipo: suscripcionTipo,
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          logo_url: logoUrl
+          logo_url: logoUrl,
+          admin_email: adminEmail,
+          admin_password: adminPassword
         }
       };
 
@@ -163,6 +216,45 @@ export default function ConfiguracionPage() {
       } else {
         const data = await res.json();
         alert(`Error: ${data.error || 'No se pudo guardar el tenant'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error en la conexión con el servidor.');
+    }
+  };
+
+  const handleRegisterPago = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTenantId || !pagoMonto || !pagoFecha) {
+      alert('Por favor complete todos los campos obligatorios del pago.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createPago',
+          id: editingTenantId,
+          pago: {
+            monto: Number(pagoMonto),
+            fecha_pago: pagoFecha,
+            metodo_pago: pagoMetodo,
+            estado: pagoEstado,
+            comprobante_nro: pagoComprobante
+          }
+        })
+      });
+      if (res.ok) {
+        fetchPagos(editingTenantId);
+        // Reset form
+        setPagoMonto('');
+        setPagoFecha('');
+        setPagoComprobante('');
+        setShowRegPagoForm(false);
+      } else {
+        const data = await res.json();
+        alert(`Error al registrar pago: ${data.error || 'No se pudo guardar el pago'}`);
       }
     } catch (err) {
       console.error(err);
@@ -317,178 +409,401 @@ export default function ConfiguracionPage() {
       {/* CREATE / EDIT TENANT MODAL */}
       {modalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content large">
-            <div className="modal-header">
-              <h3 className="modal-title">{editingTenantId ? 'Editar Configuración de Tenant' : 'Registrar Nuevo Tenant'}</h3>
+          <div className="modal-content large" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
+              <h3 className="modal-title">{editingTenantId ? 'Editar Configuración de Inquilino' : 'Registrar Nuevo Inquilino'}</h3>
               <button className="modal-close-btn" onClick={handleCloseModal}>&times;</button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
-                
-                {/* Form fields */}
-                <div>
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label className="form-label">Nombre Comercial *</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="Ej. Rimac Corredores" 
-                        value={nombre} 
-                        onChange={(e) => setNombre(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Razón Social *</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="Ej. Rímac Corredores de Seguros S.A." 
-                        value={razonSocial} 
-                        onChange={(e) => setRazonSocial(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label className="form-label">RUC (11 dígitos) *</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="Ej. 20601234567" 
-                        maxLength={11}
-                        value={ruc} 
-                        onChange={(e) => setRuc(e.target.value.replace(/\D/g, ''))} 
-                        required 
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Logo URL</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="https://ejemplo.com/logo.png" 
-                        value={logoUrl} 
-                        onChange={(e) => setLogoUrl(e.target.value)} 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label className="form-label">Estado del Inquilino *</label>
-                      <select 
-                        className="form-input" 
-                        value={estado} 
-                        onChange={(e: any) => setEstado(e.target.value)}
-                      >
-                        <option value="Activo">Activo (Acceso completo)</option>
-                        <option value="Suspendido">Suspendido (Modo lectura/bloqueado)</option>
-                        <option value="Eliminado">Eliminado (Sin acceso)</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Tipo de Suscripción *</label>
-                      <select 
-                        className="form-input" 
-                        value={suscripcionTipo} 
-                        onChange={(e: any) => setSuscripcionTipo(e.target.value)}
-                      >
-                        <option value="Mensual">Mensual (Facturación recurrente)</option>
-                        <option value="Anual">Anual (Facturación anualizada)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label className="form-label">Fecha de Inicio de Suscripción *</label>
-                      <input 
-                        type="date" 
-                        className="form-input" 
-                        value={fechaInicio} 
-                        onChange={(e) => setFechaInicio(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Fecha de Fin de Suscripción *</label>
-                      <input 
-                        type="date" 
-                        className="form-input" 
-                        min={fechaInicio}
-                        value={fechaFin} 
-                        onChange={(e) => setFechaFin(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info and Preview card */}
-                <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: 'var(--radius-lg)', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                  <h4 style={{ fontSize: '14px', color: '#0F172A', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Building2 size={16} style={{ color: '#2563EB' }} />
-                    Vista Previa de Marca Corporativa
-                  </h4>
-
-                  {/* Mock Branding Preview Card */}
-                  <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
-                    {logoUrl ? (
-                      <img 
-                        src={logoUrl} 
-                        alt="Preview Logo" 
-                        style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #E2E8F0', padding: '2px' }}
-                        onError={(e) => {
-                          (e.target as any).src = 'https://placehold.co/80x80/f1f5f9/64748b?text=InsureOne';
-                        }}
-                      />
-                    ) : (
-                      <div style={{ width: '80px', height: '80px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', border: '2px solid #E2E8F0' }}>
-                        {nombre ? nombre.substring(0, 2).toUpperCase() : 'IO'}
-                      </div>
-                    )}
-
-                    <div>
-                      <span style={{ fontWeight: 700, fontSize: '15px', color: '#0F172A', display: 'block' }}>
-                        {nombre || 'Nombre del Tenant'}
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
-                        RUC: {ruc || '-----------------'}
-                      </span>
-                    </div>
-
-                    <div style={{ width: '100%', borderTop: '1px dashed #E2E8F0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#64748B' }}>Suscripción:</span>
-                      <span style={{ fontWeight: 600, color: '#0F172A' }}>{suscripcionTipo}</span>
-                    </div>
-
-                    <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#64748B' }}>Vence el:</span>
-                      <span style={{ fontWeight: 600, color: '#0F172A' }}>{fechaFin ? formatDateToLocal(fechaFin) : '--/--/----'}</span>
-                    </div>
-                  </div>
-
-                  {/* Warning label */}
-                  <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: 'auto' }}>
-                    <AlertTriangle size={16} style={{ color: '#D97706', marginTop: '2px', flexShrink: 0 }} />
-                    <span style={{ fontSize: '11.5px', color: '#92400E', lineHeight: '1.4' }}>
-                      <strong>Advertencia de Seguridad:</strong> Al suspender a un Tenant, los usuarios afiliados ya no podrán facturar ni modificar pólizas, solo podrán realizar lecturas.
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">
-                  {editingTenantId ? 'Guardar Cambios' : 'Crear Cuenta Tenant'}
+            
+            {/* Modal Tabs Selection */}
+            {editingTenantId && (
+              <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '0 24px', backgroundColor: '#F8FAFC', flexShrink: 0 }}>
+                <button 
+                  type="button"
+                  style={{
+                    padding: '12px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: modalTab === 'datos' ? '#2563EB' : '#64748B',
+                    borderBottom: modalTab === 'datos' ? '2px solid #2563EB' : '2px solid transparent',
+                    background: 'transparent',
+                    borderLeft: 'none',
+                    borderRight: 'none',
+                    borderTop: 'none',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setModalTab('datos')}
+                >
+                  Datos Generales y Accesos
+                </button>
+                <button 
+                  type="button"
+                  style={{
+                    padding: '12px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: modalTab === 'pagos' ? '#2563EB' : '#64748B',
+                    borderBottom: modalTab === 'pagos' ? '2px solid #2563EB' : '2px solid transparent',
+                    background: 'transparent',
+                    borderLeft: 'none',
+                    borderRight: 'none',
+                    borderTop: 'none',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => {
+                    setModalTab('pagos');
+                    fetchPagos(editingTenantId);
+                  }}
+                >
+                  Historial de Pagos de Suscripción
                 </button>
               </div>
-            </form>
+            )}
+
+            {modalTab === 'datos' ? (
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', overflowY: 'auto', flex: 1 }}>
+                  
+                  {/* Form fields */}
+                  <div>
+                    <div className="grid-cols-2">
+                      <div className="form-group">
+                        <label className="form-label">Nombre Comercial *</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Ej. Rimac Corredores" 
+                          value={nombre} 
+                          onChange={(e) => setNombre(e.target.value)} 
+                          required 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Razón Social *</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Ej. Rímac Corredores de Seguros S.A." 
+                          value={razonSocial} 
+                          onChange={(e) => setRazonSocial(e.target.value)} 
+                          required 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid-cols-2">
+                      <div className="form-group">
+                        <label className="form-label">RUC (11 dígitos) *</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Ej. 20601234567" 
+                          maxLength={11}
+                          value={ruc} 
+                          onChange={(e) => setRuc(e.target.value.replace(/\D/g, ''))} 
+                          required 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Logo URL</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="https://ejemplo.com/logo.png" 
+                          value={logoUrl} 
+                          onChange={(e) => setLogoUrl(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid-cols-2">
+                      <div className="form-group">
+                        <label className="form-label">Estado del Inquilino *</label>
+                        <select 
+                          className="form-input" 
+                          value={estado} 
+                          onChange={(e: any) => setEstado(e.target.value)}
+                        >
+                          <option value="Activo">Activo (Acceso completo)</option>
+                          <option value="Suspendido">Suspendido (Modo lectura/bloqueado)</option>
+                          <option value="Eliminado">Eliminado (Sin acceso)</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Tipo de Suscripción *</label>
+                        <select 
+                          className="form-input" 
+                          value={suscripcionTipo} 
+                          onChange={(e: any) => setSuscripcionTipo(e.target.value)}
+                        >
+                          <option value="Mensual">Mensual (Facturación recurrente)</option>
+                          <option value="Anual">Anual (Facturación anualizada)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid-cols-2">
+                      <div className="form-group">
+                        <label className="form-label">Fecha de Inicio de Suscripción *</label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          value={fechaInicio} 
+                          onChange={(e) => setFechaInicio(e.target.value)} 
+                          required 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Fecha de Fin de Suscripción *</label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          min={fechaInicio}
+                          value={fechaFin} 
+                          onChange={(e) => setFechaFin(e.target.value)} 
+                          required 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Admin Access Credentials Section */}
+                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '15px', marginTop: '15px' }}>
+                      <h4 style={{ fontSize: '13.5px', fontWeight: 600, color: '#1E293B', marginBottom: '10px' }}>Credenciales de Acceso Administrador (User-ID)</h4>
+                      <div className="grid-cols-2">
+                        <div className="form-group">
+                          <label className="form-label">Email del Administrador (User-ID)</label>
+                          <input 
+                            type="email" 
+                            className="form-input" 
+                            placeholder="admin@corredor.com" 
+                            value={adminEmail} 
+                            onChange={(e) => setAdminEmail(e.target.value)} 
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Contraseña de Acceso</label>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="Contraseña" 
+                            value={adminPassword} 
+                            onChange={(e) => setAdminPassword(e.target.value)} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Info and Preview card */}
+                  <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: 'var(--radius-lg)', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <h4 style={{ fontSize: '14px', color: '#0F172A', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Building2 size={16} style={{ color: '#2563EB' }} />
+                      Vista Previa de Marca Corporativa
+                    </h4>
+
+                    {/* Mock Branding Preview Card */}
+                    <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+                      {logoUrl ? (
+                        <img 
+                          src={logoUrl} 
+                          alt="Preview Logo" 
+                          style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #E2E8F0', padding: '2px' }}
+                          onError={(e) => {
+                            (e.target as any).src = 'https://placehold.co/80x80/f1f5f9/64748b?text=InsureOne';
+                          }}
+                        />
+                      ) : (
+                        <div style={{ width: '80px', height: '80px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', border: '2px solid #E2E8F0' }}>
+                          {nombre ? nombre.substring(0, 2).toUpperCase() : 'IO'}
+                        </div>
+                      )}
+
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: '15px', color: '#0F172A', display: 'block' }}>
+                          {nombre || 'Nombre del Tenant'}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                          RUC: {ruc || '-----------------'}
+                        </span>
+                      </div>
+
+                      <div style={{ width: '100%', borderTop: '1px dashed #E2E8F0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                        <span style={{ color: '#64748B' }}>Suscripción:</span>
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>{suscripcionTipo}</span>
+                      </div>
+
+                      <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                        <span style={{ color: '#64748B' }}>Vence el:</span>
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>{fechaFin ? formatDateToLocal(fechaFin) : '--/--/----'}</span>
+                      </div>
+                    </div>
+
+                    {/* Warning label */}
+                    <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: 'auto' }}>
+                      <AlertTriangle size={16} style={{ color: '#D97706', marginTop: '2px', flexShrink: 0 }} />
+                      <span style={{ fontSize: '11.5px', color: '#92400E', lineHeight: '1.4' }}>
+                        <strong>Advertencia de Seguridad:</strong> Al suspender a un Tenant, los usuarios afiliados ya no podrán facturar ni modificar pólizas, solo podrán realizar lecturas.
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+                <div className="modal-footer" style={{ flexShrink: 0 }}>
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingTenantId ? 'Guardar Cambios' : 'Crear Cuenta Tenant'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1, padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>Historial de Pagos de Suscripción</h4>
+                  {!showRegPagoForm && (
+                    <button 
+                      type="button" 
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        setPagoMonto('');
+                        setPagoFecha(new Date().toISOString().split('T')[0]);
+                        setPagoComprobante('');
+                        setShowRegPagoForm(true);
+                      }}
+                    >
+                      + Registrar Pago
+                    </button>
+                  )}
+                </div>
+
+                {showRegPagoForm && (
+                  <form onSubmit={handleRegisterPago} style={{ background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
+                    <h5 style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', marginBottom: '4px' }}>Registrar Nuevo Pago de Suscripción</h5>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Monto (USD) *</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          placeholder="150.00" 
+                          value={pagoMonto}
+                          onChange={(e) => setPagoMonto(e.target.value)}
+                          required 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Fecha de Pago *</label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          value={pagoFecha}
+                          onChange={(e) => setPagoFecha(e.target.value)}
+                          required 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Método de Pago</label>
+                        <select 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          value={pagoMetodo}
+                          onChange={(e) => setPagoMetodo(e.target.value)}
+                        >
+                          <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                          <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                          <option value="Paypal">Paypal</option>
+                          <option value="Efectivo">Efectivo</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Nro Comprobante / Factura</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          placeholder="Ej. FACT-006" 
+                          value={pagoComprobante}
+                          onChange={(e) => setPagoComprobante(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Estado del Pago</label>
+                        <select 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '12.5px' }}
+                          value={pagoEstado}
+                          onChange={(e: any) => setPagoEstado(e.target.value)}
+                        >
+                          <option value="Pagado">Pagado</option>
+                          <option value="Pendiente">Pendiente</option>
+                          <option value="Fallido">Fallido</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowRegPagoForm(false)}>Cancelar</button>
+                      <button type="submit" className="btn btn-primary btn-sm">Guardar Pago</button>
+                    </div>
+                  </form>
+                )}
+
+                {loadingPagos ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#64748B' }}>
+                    Cargando historial de pagos...
+                  </div>
+                ) : pagos.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px', background: '#F8FAFC', border: '1px dashed #E2E8F0', borderRadius: '8px', color: '#94A3B8' }}>
+                    No se han registrado pagos para este inquilino.
+                  </div>
+                ) : (
+                  <div className="table-responsive" style={{ flex: 1, overflowY: 'auto' }}>
+                    <table className="premium-table" style={{ fontSize: '12.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Nro Comprobante</th>
+                          <th>Fecha Pago</th>
+                          <th>Método</th>
+                          <th>Monto</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagos.map((p) => (
+                          <tr key={p.id}>
+                            <td style={{ fontWeight: 600 }}>{p.comprobante_nro || '-'}</td>
+                            <td>{formatDateToLocal(p.fecha_pago)}</td>
+                            <td>{p.metodo_pago}</td>
+                            <td style={{ fontWeight: 700, color: '#0F172A' }}>
+                              USD {p.monto.toFixed(2)}
+                            </td>
+                            <td>
+                              <span className={`badge ${
+                                p.estado === 'Pagado' ? 'badge-success' :
+                                p.estado === 'Pendiente' ? 'badge-warning' : 'badge-danger'
+                              }`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                                {p.estado.toUpperCase()}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="modal-footer" style={{ borderTop: '1px solid #E2E8F0', paddingTop: '15px', marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cerrar</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

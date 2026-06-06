@@ -3,8 +3,8 @@ import { getPolicies, getPaymentSchedules } from '@/lib/db';
 
 export async function GET() {
   try {
-    const policies = getPolicies();
-    const schedules = getPaymentSchedules();
+    const policies = await getPolicies();
+    const schedules = await getPaymentSchedules();
     
     // 1. Total Primas Intermediadas (Suma de prima_total de todas las pólizas vigentes y por vencer)
     const activePolicies = policies.filter(p => p.estado === 'Vigente' || p.estado === 'Por Vencer');

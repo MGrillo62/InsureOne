@@ -3,7 +3,7 @@ import { getLeads, createLead, updateLeadStatus, deleteLead } from '@/lib/db';
 
 export async function GET() {
   try {
-    const leads = getLeads();
+    const leads = await getLeads();
     return NextResponse.json(leads);
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener leads' }, { status: 500 });
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const { action, id, estado, nombre, compania, documento, email, telefono, direccion, giro, prima_proyectada, ramo } = body;
     
     if (action === 'create') {
-      const newLead = createLead({
+      const newLead = await createLead({
         nombre,
         compania,
         documento,
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       if (!id || !estado) {
         return NextResponse.json({ error: 'ID y Estado requeridos' }, { status: 400 });
       }
-      const updated = updateLeadStatus(id, estado);
+      const updated = await updateLeadStatus(id, estado);
       return NextResponse.json({ success: true, lead: updated });
     }
     
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       if (!id) {
         return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
       }
-      deleteLead(id);
+      await deleteLead(id);
       return NextResponse.json({ success: true });
     }
     

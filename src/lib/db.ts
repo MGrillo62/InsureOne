@@ -1,9 +1,15 @@
+import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
-// Define DB File Path inside the workspace
-const DB_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DB_DIR, 'db.json');
+// PostgreSQL connection pool
+const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_Ov0Btlc8ikQH@ep-lingering-waterfall-aplth6rs-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require';
+const pool = new Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 // Interface Types
 export interface Tenant {
@@ -16,6 +22,18 @@ export interface Tenant {
   fecha_inicio: string;
   fecha_fin: string;
   logo_url?: string;
+  admin_email?: string;
+  admin_password?: string;
+}
+
+export interface TenantPago {
+  id: string;
+  id_tenant: string;
+  monto: number;
+  fecha_pago: string;
+  metodo_pago: string;
+  estado: 'Pagado' | 'Pendiente' | 'Fallido';
+  comprobante_nro: string;
 }
 
 export interface User {
@@ -37,7 +55,7 @@ export interface Client {
   email: string;
   telefono: string;
   direccion: string;
-  id_parent?: string; // Links corporate client to employee or holder to dependent
+  id_parent?: string;
   historial: Array<{
     fecha: string;
     accion: string;
@@ -50,8 +68,8 @@ export interface Policy {
   id: string;
   id_tenant: string;
   id_cliente: string;
-  compania_aseguradora: string; // Pacifico, Rimac, Mapfre, La Positiva
-  ramo: string; // Vehicular, EPS, SCTR, Vida, Multirriesgo
+  compania_aseguradora: string;
+  ramo: string;
   numero_poliza: string;
   suma_asegurada: number;
   deducibles: string;
@@ -115,681 +133,712 @@ export interface Claim {
   }>;
 }
 
-export interface DatabaseStructure {
-  tenants: Tenant[];
-  currentUser: User;
-  activeTenantId: string;
-  clientes: Client[];
-  polizas: Policy[];
-  cronograma: PaymentSchedule[];
-  leads: Lead[];
-  siniestros: Claim[];
-}
-
-// Initial Seed Data
-const initialDB: DatabaseStructure = {
-  tenants: [
-    { 
-      id: 'T-001', 
-      nombre: 'Mazmorra Games',
-      ruc: '20601234567',
-      razon_social: 'Mazmorra Games S.A.C.',
-      estado: 'Activo',
-      suscripcion_tipo: 'Anual',
-      fecha_inicio: '2026-01-01',
-      fecha_fin: '2026-12-31',
-      logo_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60'
-    },
-    { 
-      id: 'T-002', 
-      nombre: 'Inversiones Rímac SAC',
-      ruc: '20556789123',
-      razon_social: 'Inversiones Rímac S.A.C.',
-      estado: 'Activo',
-      suscripcion_tipo: 'Mensual',
-      fecha_inicio: '2026-02-15',
-      fecha_fin: '2027-02-14',
-      logo_url: 'https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=80&auto=format&fit=crop&q=60'
-    },
-    { 
-      id: 'T-003', 
-      nombre: 'Importaciones Chiclayo',
-      ruc: '20448976512',
-      razon_social: 'Importaciones Chiclayo E.I.R.L.',
-      estado: 'Suspendido',
-      suscripcion_tipo: 'Mensual',
-      fecha_inicio: '2025-10-10',
-      fecha_fin: '2026-04-09',
-      logo_url: ''
-    }
-  ],
-  currentUser: {
-    id: 'USR-001',
-    nombre: 'Super Admin',
-    email: 'admin@insureone.com',
-    rol: 'Superadmin',
-    avatar: 'SA',
-    id_tenant: 'T-001'
-  },
-  activeTenantId: 'T-001',
-  clientes: [
-    {
-      id: 'CLI-001',
-      id_tenant: 'T-001',
-      tipo: 'natural',
-      nombre: 'Juan Perez Gomez',
-      documento_tipo: 'DNI',
-      documento_numero: '45897612',
-      email: 'juan.perez@gmail.com',
-      telefono: '998877665',
-      direccion: 'Av. Larco 456, Miraflores',
-      historial: [
-        { fecha: '2026-05-10', accion: 'Creación de Asegurado', nota: 'Se registra cliente natural para seguro vehicular.', usuario: 'Super Admin' }
-      ]
-    },
-    {
-      id: 'CLI-002',
-      id_tenant: 'T-001',
-      tipo: 'natural',
-      nombre: 'María Perez Lopez',
-      documento_tipo: 'DNI',
-      documento_numero: '70251489',
-      email: 'maria.perez@gmail.com',
-      telefono: '987654321',
-      direccion: 'Av. Larco 456, Miraflores',
-      id_parent: 'CLI-001', // Dependent of Juan Perez
-      historial: [
-        { fecha: '2026-05-11', accion: 'Vinculación', nota: 'Se vincula como dependiente (Cónyuge) de Juan Perez.', usuario: 'Super Admin' }
-      ]
-    },
-    {
-      id: 'CLI-003',
-      id_tenant: 'T-001',
-      tipo: 'juridica',
-      nombre: 'Constructora Alfa S.A.C.',
-      documento_tipo: 'RUC',
-      documento_numero: '20601234567',
-      email: 'contacto@constructoraalfa.pe',
-      telefono: '014455667',
-      direccion: 'Av. Primavera 1230, Surco',
-      historial: [
-        { fecha: '2026-04-20', accion: 'Creación de Asegurado', nota: 'Cliente corporativo creado por recomendación de leads.', usuario: 'Super Admin' }
-      ]
-    },
-    {
-      id: 'CLI-004',
-      id_tenant: 'T-001',
-      tipo: 'natural',
-      nombre: 'Carlos Mendoza Ruiz',
-      documento_tipo: 'DNI',
-      documento_numero: '10234567',
-      email: 'carlos.mendoza@alfa.pe',
-      telefono: '994433221',
-      direccion: 'Calle Las Lomas 234, Surco',
-      id_parent: 'CLI-003', // Employee of Constructora Alfa
-      historial: [
-        { fecha: '2026-04-25', accion: 'Vinculación de Empleado', nota: 'Asegurado titular bajo póliza de SCTR corporativa de Constructora Alfa.', usuario: 'Super Admin' }
-      ]
-    }
-  ],
-  polizas: [
-    {
-      id: 'POL-001',
-      id_tenant: 'T-001',
-      id_cliente: 'CLI-001',
-      compania_aseguradora: 'Rimac',
-      ramo: 'Vehicular',
-      numero_poliza: 'V-908754-2026',
-      suma_asegurada: 25000,
-      deducibles: 'USD 150 todo riesgo, 10% de la pérdida',
-      coberturas: 'Daño propio, Responsabilidad Civil USD 100,000, Robo total',
-      prima_neta: 1000,
-      gastos_emision: 30,
-      igv: 185.4,
-      prima_total: 1215.4,
-      porcentaje_comision: 15,
-      comision_total: 150,
-      fecha_inicio: '2026-05-10',
-      fecha_fin: '2027-05-09',
-      estado: 'Vigente'
-    },
-    {
-      id: 'POL-002',
-      id_tenant: 'T-001',
-      id_cliente: 'CLI-003',
-      compania_aseguradora: 'Pacifico',
-      ramo: 'EPS',
-      numero_poliza: 'E-334455-2026',
-      suma_asegurada: 100000,
-      deducibles: 'Copago S/ 40 en clínicas afiliadas, 10% coaseguro',
-      coberturas: 'Atención ambulatoria, hospitalaria, emergencias 100%, maternidad',
-      prima_neta: 4000,
-      gastos_emision: 120,
-      igv: 741.6,
-      prima_total: 4861.6,
-      porcentaje_comision: 10,
-      comision_total: 400,
-      fecha_inicio: '2026-06-01',
-      fecha_fin: '2027-05-31',
-      estado: 'Vigente'
-    },
-    {
-      id: 'POL-003',
-      id_tenant: 'T-001',
-      id_cliente: 'CLI-001',
-      compania_aseguradora: 'Mapfre',
-      ramo: 'Vida',
-      numero_poliza: 'VI-887722-2025',
-      suma_asegurada: 50000,
-      deducibles: 'Sin deducible',
-      coberturas: 'Fallecimiento natural o accidental, invalidez permanente',
-      prima_neta: 300,
-      gastos_emision: 9,
-      igv: 55.62,
-      prima_total: 364.62,
-      porcentaje_comision: 20,
-      comision_total: 60,
-      fecha_inicio: '2025-06-20',
-      fecha_fin: '2026-06-19', // Vence pronto! (en 14 días)
-      estado: 'Por Vencer'
-    }
-  ],
-  cronograma: [
-    {
-      id: 'PAY-001',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-001',
-      numero_cuota: 1,
-      monto_cuota_cliente: 303.85,
-      comision_cuota_broker: 37.5,
-      fecha_vencimiento: '2026-06-09', // Vence pronto!
-      estado_pago: 'Pendiente',
-      estado_comision: 'Pendiente'
-    },
-    {
-      id: 'PAY-002',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-001',
-      numero_cuota: 2,
-      monto_cuota_cliente: 303.85,
-      comision_cuota_broker: 37.5,
-      fecha_vencimiento: '2026-07-09',
-      estado_pago: 'Pendiente',
-      estado_comision: 'Pendiente'
-    },
-    {
-      id: 'PAY-003',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-001',
-      numero_cuota: 3,
-      monto_cuota_cliente: 303.85,
-      comision_cuota_broker: 37.5,
-      fecha_vencimiento: '2026-08-09',
-      estado_pago: 'Pendiente',
-      estado_comision: 'Pendiente'
-    },
-    {
-      id: 'PAY-004',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-001',
-      numero_cuota: 4,
-      monto_cuota_cliente: 303.85,
-      comision_cuota_broker: 37.5,
-      fecha_vencimiento: '2026-09-09',
-      estado_pago: 'Pendiente',
-      estado_comision: 'Pendiente'
-    },
-    // Poliza 2 EPS - 2 Cuotas, la primera ya se pago
-    {
-      id: 'PAY-005',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-002',
-      numero_cuota: 1,
-      monto_cuota_cliente: 2430.8,
-      comision_cuota_broker: 200,
-      fecha_vencimiento: '2026-06-01',
-      estado_pago: 'Pagado',
-      estado_comision: 'Cobrado'
-    },
-    {
-      id: 'PAY-006',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-002',
-      numero_cuota: 2,
-      monto_cuota_cliente: 2430.8,
-      comision_cuota_broker: 200,
-      fecha_vencimiento: '2026-07-01',
-      estado_pago: 'Pendiente',
-      estado_comision: 'Pendiente'
-    },
-    // Poliza 3 - Vida (1 Cuota única), venció pago
-    {
-      id: 'PAY-007',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-003',
-      numero_cuota: 1,
-      monto_cuota_cliente: 364.62,
-      comision_cuota_broker: 60,
-      fecha_vencimiento: '2025-07-20', // Pasado
-      estado_pago: 'Pagado',
-      estado_comision: 'Cobrado'
-    }
-  ],
-  leads: [
-    {
-      id: 'LD-001',
-      id_tenant: 'T-001',
-      nombre: 'Ricardo Samaniego',
-      compania: 'Minera Los Andes',
-      documento: '20608976541',
-      email: 'rsamaniego@andes.pe',
-      telefono: '992345678',
-      direccion: 'Av. Javier Prado Este 2500, San Borja',
-      giro: 'Minería',
-      estado: 'nuevo',
-      prima_proyectada: 12000,
-      ramo: 'SCTR',
-      fecha_creacion: '2026-06-01'
-    },
-    {
-      id: 'LD-002',
-      id_tenant: 'T-001',
-      nombre: 'Ana Sofía Vergara',
-      compania: 'Estudio Vergara & Abogados',
-      documento: '20556789123',
-      email: 'avergara@estudiovergara.pe',
-      telefono: '988776655',
-      direccion: 'Av. Camino Real 450, San Isidro',
-      giro: 'Legal',
-      estado: 'contactado',
-      prima_proyectada: 5000,
-      ramo: 'Multirriesgo',
-      fecha_creacion: '2026-06-02'
-    },
-    {
-      id: 'LD-003',
-      id_tenant: 'T-001',
-      nombre: 'Roberto Gutierrez',
-      compania: 'Roberto Gutierrez SAC',
-      documento: '20123456789',
-      email: 'rgutierrez@gmail.com',
-      telefono: '999888777',
-      direccion: 'Av. Benavides 1430, Miraflores',
-      giro: 'Comercio',
-      estado: 'cotizando',
-      prima_proyectada: 1500,
-      ramo: 'Vehicular',
-      fecha_creacion: '2026-06-03'
-    }
-  ],
-  siniestros: [
-    {
-      id: 'SIN-001',
-      id_tenant: 'T-001',
-      id_poliza: 'POL-001',
-      id_cliente: 'CLI-001',
-      fecha_evento: '2026-05-28',
-      tipo_siniestro: 'Choque Vehicular Leve',
-      ajustador: 'Roberto Quiroz (Rimac)',
-      estado: 'En Evaluacion',
-      fecha_creacion: '2026-05-29',
-      bitacora: [
-        { fecha: '2026-05-29', motivo: 'Apertura de Siniestro', hora: '09:30 AM', proximo_control: '2026-06-05' },
-        { fecha: '2026-06-02', motivo: 'Envío de cotización de taller', hora: '03:15 PM', proximo_control: '2026-06-09' }
-      ]
-    }
-  ]
+// Memory State fallback variables for session multi-tenancy
+let activeTenantId = 'T-001';
+let currentUser: User = {
+  id: 'USR-001',
+  nombre: 'Super Admin',
+  email: 'admin@insureone.com',
+  rol: 'Superadmin',
+  avatar: 'SA',
+  id_tenant: 'T-001'
 };
 
 // Database Initialization helper
-function initializeDB() {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialDB, null, 2), 'utf-8');
-  }
-}
+let databaseInitialized = false;
 
-// Read DB Helper
-export function readDB(): DatabaseStructure {
-  initializeDB();
+export async function initializeDatabase() {
+  if (databaseInitialized) return;
+
   try {
-    const data = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading database file, returning seed data.', error);
-    return initialDB;
+    // 1. Create tables if not exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tenants (
+        id VARCHAR(10) PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        ruc VARCHAR(11) NOT NULL,
+        razon_social VARCHAR(150) NOT NULL,
+        estado VARCHAR(20) NOT NULL,
+        suscripcion_tipo VARCHAR(20) NOT NULL,
+        fecha_inicio VARCHAR(10) NOT NULL,
+        fecha_fin VARCHAR(10) NOT NULL,
+        logo_url TEXT
+      );
+      
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_email VARCHAR(150);
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_password VARCHAR(100);
+      
+      CREATE TABLE IF NOT EXISTS tenant_pagos (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        monto NUMERIC(12, 2) NOT NULL,
+        fecha_pago VARCHAR(10) NOT NULL,
+        metodo_pago VARCHAR(50) NOT NULL,
+        estado VARCHAR(20) NOT NULL,
+        comprobante_nro VARCHAR(50) NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS clientes (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        tipo VARCHAR(20) NOT NULL,
+        nombre VARCHAR(150) NOT NULL,
+        documento_tipo VARCHAR(10) NOT NULL,
+        documento_numero VARCHAR(20) NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        telefono VARCHAR(20) NOT NULL,
+        direccion TEXT NOT NULL,
+        id_parent VARCHAR(10),
+        historial JSONB NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS polizas (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        id_cliente VARCHAR(10) NOT NULL,
+        compania_aseguradora VARCHAR(50) NOT NULL,
+        ramo VARCHAR(50) NOT NULL,
+        numero_poliza VARCHAR(50) NOT NULL,
+        suma_asegurada NUMERIC(15, 2) NOT NULL,
+        deducibles TEXT NOT NULL,
+        coberturas TEXT NOT NULL,
+        prima_neta NUMERIC(12, 2) NOT NULL,
+        gastos_emision NUMERIC(12, 2) NOT NULL,
+        igv NUMERIC(12, 2) NOT NULL,
+        prima_total NUMERIC(12, 2) NOT NULL,
+        porcentaje_comision NUMERIC(5, 2) NOT NULL,
+        comision_total NUMERIC(12, 2) NOT NULL,
+        fecha_inicio VARCHAR(10) NOT NULL,
+        fecha_fin VARCHAR(10) NOT NULL,
+        estado VARCHAR(20) NOT NULL,
+        moneda VARCHAR(5) NOT NULL,
+        periodicidad VARCHAR(20) NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS cronograma (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        id_poliza VARCHAR(10) NOT NULL,
+        numero_cuota INT NOT NULL,
+        monto_cuota_cliente NUMERIC(12, 2) NOT NULL,
+        comision_cuota_broker NUMERIC(12, 2) NOT NULL,
+        fecha_vencimiento VARCHAR(10) NOT NULL,
+        estado_pago VARCHAR(20) NOT NULL,
+        estado_comision VARCHAR(20) NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS leads (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        nombre VARCHAR(150) NOT NULL,
+        compania VARCHAR(150),
+        documento VARCHAR(20) NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        telefono VARCHAR(20) NOT NULL,
+        direccion TEXT NOT NULL,
+        giro VARCHAR(100) NOT NULL,
+        estado VARCHAR(20) NOT NULL,
+        prima_proyectada NUMERIC(12, 2) NOT NULL,
+        ramo VARCHAR(50) NOT NULL,
+        fecha_creacion VARCHAR(10) NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS siniestros (
+        id VARCHAR(10) PRIMARY KEY,
+        id_tenant VARCHAR(10) NOT NULL,
+        id_poliza VARCHAR(10) NOT NULL,
+        id_cliente VARCHAR(10) NOT NULL,
+        fecha_evento VARCHAR(10) NOT NULL,
+        tipo_siniestro VARCHAR(150) NOT NULL,
+        ajustador VARCHAR(100),
+        estado VARCHAR(30) NOT NULL,
+        fecha_creacion VARCHAR(10) NOT NULL,
+        bitacora JSONB NOT NULL
+      );
+    `);
+
+    // 2. Check if seeding is needed
+    const tenantsCheck = await pool.query('SELECT count(*) FROM tenants');
+    const tenantCount = parseInt(tenantsCheck.rows[0].count);
+
+    if (tenantCount === 0) {
+      console.log('Neon database is empty. Migrating local JSON data seeds...');
+      const dbPath = path.join(process.cwd(), 'data', 'db.json');
+      if (fs.existsSync(dbPath)) {
+        const raw = fs.readFileSync(dbPath, 'utf-8');
+        const seedData = JSON.parse(raw);
+
+        // Seeding tenants
+        if (Array.isArray(seedData.tenants)) {
+          for (const t of seedData.tenants) {
+            await pool.query(
+              `INSERT INTO tenants (id, nombre, ruc, razon_social, estado, suscripcion_tipo, fecha_inicio, fecha_fin, logo_url) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              [t.id, t.nombre, t.ruc || '20601234567', t.razon_social || t.nombre, t.estado || 'Activo', t.suscripcion_tipo || 'Anual', t.fecha_inicio || '2026-01-01', t.fecha_fin || '2026-12-31', t.logo_url || '']
+            );
+          }
+        }
+
+        // Seeding clientes
+        if (Array.isArray(seedData.clientes)) {
+          for (const c of seedData.clientes) {
+            await pool.query(
+              `INSERT INTO clientes (id, id_tenant, tipo, nombre, documento_tipo, documento_numero, email, telefono, direccion, id_parent, historial) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+              [c.id, c.id_tenant, c.tipo, c.nombre, c.documento_tipo, c.documento_numero, c.email, c.telefono, c.direccion, c.id_parent || null, JSON.stringify(c.historial || [])]
+            );
+          }
+        }
+
+        // Seeding polizas
+        if (Array.isArray(seedData.polizas)) {
+          for (const p of seedData.polizas) {
+            await pool.query(
+              `INSERT INTO polizas (id, id_tenant, id_cliente, compania_aseguradora, ramo, numero_poliza, suma_asegurada, deducibles, coberturas, prima_neta, gastos_emision, igv, prima_total, porcentaje_comision, comision_total, fecha_inicio, fecha_fin, estado, moneda, periodicidad) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+              [p.id, p.id_tenant, p.id_cliente, p.compania_aseguradora, p.ramo, p.numero_poliza, p.suma_asegurada, p.deducibles, p.coberturas, p.prima_neta, p.gastos_emision, p.igv, p.prima_total, p.porcentaje_comision, p.comision_total, p.fecha_inicio, p.fecha_fin, p.estado, p.moneda || 'USD', p.periodicidad || 'Anual']
+            );
+          }
+        }
+
+        // Seeding cronograma
+        if (Array.isArray(seedData.cronograma)) {
+          for (const cr of seedData.cronograma) {
+            await pool.query(
+              `INSERT INTO cronograma (id, id_tenant, id_poliza, numero_cuota, monto_cuota_cliente, comision_cuota_broker, fecha_vencimiento, estado_pago, estado_comision) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              [cr.id, cr.id_tenant, cr.id_poliza, cr.numero_cuota, cr.monto_cuota_cliente, cr.comision_cuota_broker, cr.fecha_vencimiento, cr.estado_pago || 'Pendiente', cr.estado_comision || 'Pendiente']
+            );
+          }
+        }
+
+        // Seeding leads
+        if (Array.isArray(seedData.leads)) {
+          for (const l of seedData.leads) {
+            await pool.query(
+              `INSERT INTO leads (id, id_tenant, nombre, compania, documento, email, telefono, direccion, giro, estado, prima_proyectada, ramo, fecha_creacion) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+              [l.id, l.id_tenant, l.nombre, l.compania || '', l.documento, l.email, l.telefono, l.direccion, l.giro, l.estado, l.prima_proyectada, l.ramo, l.fecha_creacion]
+            );
+          }
+        }
+
+        // Seeding siniestros
+        if (Array.isArray(seedData.siniestros)) {
+          for (const s of seedData.siniestros) {
+            await pool.query(
+              `INSERT INTO siniestros (id, id_tenant, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, fecha_creacion, bitacora) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [s.id, s.id_tenant, s.id_poliza, s.id_cliente, s.fecha_evento, s.tipo_siniestro, s.ajustador || '', s.estado, s.fecha_creacion, JSON.stringify(s.bitacora || [])]
+            );
+          }
+        }
+
+        console.log('Neon database seeded successfully.');
+      }
+    }
+
+    // 3. Seed tenant payments if empty
+    const pagosCheck = await pool.query('SELECT count(*) FROM tenant_pagos');
+    const pagosCount = parseInt(pagosCheck.rows[0].count);
+    if (pagosCount === 0) {
+      console.log('Seeding initial tenant payments...');
+      await pool.query(`
+        INSERT INTO tenant_pagos (id, id_tenant, monto, fecha_pago, metodo_pago, estado, comprobante_nro)
+        VALUES 
+        ('PAG-001', 'T-001', 150.00, '2026-01-05', 'Tarjeta de Crédito', 'Pagado', 'FACT-001'),
+        ('PAG-002', 'T-001', 150.00, '2026-02-05', 'Tarjeta de Crédito', 'Pagado', 'FACT-002'),
+        ('PAG-003', 'T-001', 150.00, '2026-03-05', 'Transferencia Bancaria', 'Pagado', 'FACT-003'),
+        ('PAG-004', 'T-001', 150.00, '2026-04-05', 'Tarjeta de Crédito', 'Pagado', 'FACT-004'),
+        ('PAG-005', 'T-001', 150.00, '2026-05-05', 'Tarjeta de Crédito', 'Pagado', 'FACT-005')
+      `);
+    }
+
+    databaseInitialized = true;
+  } catch (err) {
+    console.error('Error initializing Neon database:', err);
   }
 }
 
-// Write DB Helper
-export function writeDB(db: DatabaseStructure) {
-  initializeDB();
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('Error writing to database file.', error);
+// Dynamic Helper for SQL updates
+async function updateTableRecord(tableName: string, id: string, updatedFields: Record<string, any>): Promise<any> {
+  await initializeDatabase();
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let index = 1;
+
+  for (const [key, val] of Object.entries(updatedFields)) {
+    if (val === undefined) continue;
+    setClauses.push(`${key} = $${index}`);
+    if (typeof val === 'object' && val !== null) {
+      values.push(JSON.stringify(val));
+    } else {
+      values.push(val);
+    }
+    index++;
   }
+
+  values.push(id);
+  const idIndex = index;
+  index++;
+
+  const activeId = activeTenantId;
+  values.push(activeId);
+  const tenantIndex = index;
+
+  const whereClause = tableName === 'tenants'
+    ? `WHERE id = $${idIndex}`
+    : `WHERE id = $${idIndex} AND id_tenant = $${tenantIndex}`;
+
+  const query = `UPDATE ${tableName} SET ${setClauses.join(', ')} ${whereClause} RETURNING *`;
+  const res = await pool.query(query, values);
+  return res.rows[0];
 }
 
-// Tenancy contextual retrieval
-export function getActiveTenantId(): string {
-  const db = readDB();
-  return db.activeTenantId;
+// Tenancy context getters/setters
+export async function getActiveTenantId(): Promise<string> {
+  return activeTenantId;
 }
 
-export function setActiveTenantId(tenantId: string) {
-  const db = readDB();
-  db.activeTenantId = tenantId;
-  writeDB(db);
+export async function setActiveTenantId(tenantId: string): Promise<void> {
+  activeTenantId = tenantId;
+  currentUser.id_tenant = tenantId;
 }
 
-export function getCurrentUser(): User {
-  const db = readDB();
-  return db.currentUser;
+export async function getCurrentUser(): Promise<User> {
+  return currentUser;
 }
 
-export function updateCurrentUser(user: Partial<User>) {
-  const db = readDB();
-  db.currentUser = { ...db.currentUser, ...user };
-  writeDB(db);
+export async function updateCurrentUser(user: Partial<User>): Promise<void> {
+  currentUser = { ...currentUser, ...user };
 }
 
 // CRUD - Tenants
-export function getTenants(): Tenant[] {
-  const db = readDB();
-  return db.tenants;
+export async function getTenants(): Promise<Tenant[]> {
+  await initializeDatabase();
+  const res = await pool.query('SELECT * FROM tenants ORDER BY id ASC');
+  return res.rows;
 }
 
-export function updateTenant(id: string, updatedFields: Partial<Omit<Tenant, 'id'>>): Tenant {
-  const db = readDB();
-  const index = db.tenants.findIndex(t => t.id === id);
-  if (index === -1) throw new Error('Tenant no encontrado');
-  
-  const updated = { ...db.tenants[index], ...updatedFields };
-  db.tenants[index] = updated;
-  writeDB(db);
-  return updated;
-}
-
-export function createTenant(tenantData: Omit<Tenant, 'id'>): Tenant {
-  const db = readDB();
-  // Find highest index or calculate new one
-  const ids = db.tenants.map(t => Number(t.id.split('-')[1]) || 0);
-  const nextNum = Math.max(...ids, 0) + 1;
+export async function createTenant(tenantData: Omit<Tenant, 'id'>): Promise<Tenant> {
+  await initializeDatabase();
+  const resIds = await pool.query('SELECT id FROM tenants ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
   const newId = `T-${String(nextNum).padStart(3, '0')}`;
-  
-  const newTenant: Tenant = {
-    id: newId,
-    ...tenantData
+
+  const res = await pool.query(
+    `INSERT INTO tenants (id, nombre, ruc, razon_social, estado, suscripcion_tipo, fecha_inicio, fecha_fin, logo_url, admin_email, admin_password) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [newId, tenantData.nombre, tenantData.ruc, tenantData.razon_social, tenantData.estado, tenantData.suscripcion_tipo, tenantData.fecha_inicio, tenantData.fecha_fin, tenantData.logo_url || '', tenantData.admin_email || '', tenantData.admin_password || '']
+  );
+  return res.rows[0];
+}
+
+export async function updateTenant(id: string, updatedFields: Partial<Omit<Tenant, 'id'>>): Promise<Tenant> {
+  return updateTableRecord('tenants', id, updatedFields);
+}
+
+// CRUD - Tenant Subscription Payments
+export async function getTenantPagos(tenantId: string): Promise<TenantPago[]> {
+  await initializeDatabase();
+  const res = await pool.query('SELECT * FROM tenant_pagos WHERE id_tenant = $1 ORDER BY fecha_pago DESC, id DESC', [tenantId]);
+  return res.rows.map(row => ({
+    ...row,
+    monto: parseFloat(row.monto)
+  }));
+}
+
+export async function createTenantPago(pago: Omit<TenantPago, 'id'>): Promise<TenantPago> {
+  await initializeDatabase();
+  const resIds = await pool.query('SELECT id FROM tenant_pagos ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+  const newId = `PAG-${String(nextNum).padStart(3, '0')}`;
+
+  const res = await pool.query(
+    `INSERT INTO tenant_pagos (id, id_tenant, monto, fecha_pago, metodo_pago, estado, comprobante_nro)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [newId, pago.id_tenant, pago.monto, pago.fecha_pago, pago.metodo_pago, pago.estado, pago.comprobante_nro]
+  );
+  return {
+    ...res.rows[0],
+    monto: parseFloat(res.rows[0].monto)
   };
-  db.tenants.push(newTenant);
-  writeDB(db);
-  return newTenant;
 }
 
 // CRUD - Clients
-export function getClients(): Client[] {
-  const db = readDB();
-  const tenantId = getActiveTenantId();
-  // If Superadmin, we can list everything or just tenant
-  // For standard multitenant operations we filter by activeTenantId
-  return db.clientes.filter(c => c.id_tenant === tenantId);
+export async function getClients(): Promise<Client[]> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+  const res = await pool.query('SELECT * FROM clientes WHERE id_tenant = $1 ORDER BY nombre ASC', [tenantId]);
+  return res.rows;
 }
 
-export function getClientById(id: string): Client | undefined {
-  const db = readDB();
-  return db.clientes.find(c => c.id === id && c.id_tenant === getActiveTenantId());
+export async function getClientById(id: string): Promise<Client | undefined> {
+  await initializeDatabase();
+  const res = await pool.query('SELECT * FROM clientes WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
+  return res.rows[0];
 }
 
-export function createClient(client: Omit<Client, 'id' | 'id_tenant' | 'historial'>): Client {
-  const db = readDB();
-  const tenantId = getActiveTenantId();
-  const newClient: Client = {
-    ...client,
-    id: `CLI-${String(db.clientes.length + 1).padStart(3, '0')}`,
-    id_tenant: tenantId,
-    historial: [
-      {
-        fecha: new Date().toISOString().split('T')[0],
-        accion: 'Registro',
-        nota: 'Se creó la ficha del asegurado.',
-        usuario: db.currentUser.nombre
-      }
-    ]
-  };
-  db.clientes.push(newClient);
-  writeDB(db);
-  return newClient;
-}
-
-export function updateClient(id: string, updatedFields: Partial<Omit<Client, 'id' | 'id_tenant' | 'historial'>>): Client {
-  const db = readDB();
-  const index = db.clientes.findIndex(c => c.id === id && c.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Cliente no encontrado');
+export async function createClient(client: Omit<Client, 'id' | 'id_tenant' | 'historial'>): Promise<Client> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
   
-  const original = db.clientes[index];
-  const updatedClient: Client = {
-    ...original,
-    ...updatedFields,
-    historial: [
-      ...original.historial,
-      {
-        fecha: new Date().toISOString().split('T')[0],
-        accion: 'Actualización',
-        nota: `Campos modificados: ${Object.keys(updatedFields).join(', ')}`,
-        usuario: db.currentUser.nombre
-      }
-    ]
-  };
-  db.clientes[index] = updatedClient;
-  writeDB(db);
-  return updatedClient;
+  const resIds = await pool.query('SELECT id FROM clientes ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+  const newId = `CLI-${String(nextNum).padStart(3, '0')}`;
+
+  const initialHistory = [{
+    fecha: new Date().toISOString().split('T')[0],
+    accion: 'Registro',
+    nota: 'Se creó la ficha del asegurado.',
+    usuario: currentUser.nombre
+  }];
+
+  const res = await pool.query(
+    `INSERT INTO clientes (id, id_tenant, tipo, nombre, documento_tipo, documento_numero, email, telefono, direccion, id_parent, historial) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [newId, tenantId, client.tipo, client.nombre, client.documento_tipo, client.documento_numero, client.email, client.telefono, client.direccion, client.id_parent || null, JSON.stringify(initialHistory)]
+  );
+  return res.rows[0];
 }
 
-export function addClientHistory(id: string, action: string, note: string) {
-  const db = readDB();
-  const index = db.clientes.findIndex(c => c.id === id && c.id_tenant === getActiveTenantId());
-  if (index === -1) return;
-  db.clientes[index].historial.push({
-    fecha: new Date().toISOString().split('T')[0],
-    accion: action,
-    nota: note,
-    usuario: db.currentUser.nombre
-  });
-  writeDB(db);
+export async function updateClient(id: string, updatedFields: Partial<Omit<Client, 'id' | 'id_tenant' | 'historial'>>): Promise<Client> {
+  await initializeDatabase();
+  const original = await getClientById(id);
+  if (!original) throw new Error('Cliente no encontrado');
+
+  const historyUpdate = [
+    ...original.historial,
+    {
+      fecha: new Date().toISOString().split('T')[0],
+      accion: 'Actualización',
+      nota: `Campos modificados: ${Object.keys(updatedFields).join(', ')}`,
+      usuario: currentUser.nombre
+    }
+  ];
+
+  const merged = { ...updatedFields, historial: historyUpdate };
+  return updateTableRecord('clientes', id, merged);
+}
+
+export async function addClientHistory(id: string, action: string, note: string): Promise<void> {
+  await initializeDatabase();
+  const original = await getClientById(id);
+  if (!original) return;
+
+  const historyUpdate = [
+    ...original.historial,
+    {
+      fecha: new Date().toISOString().split('T')[0],
+      accion: action,
+      nota: note,
+      usuario: currentUser.nombre
+    }
+  ];
+
+  await updateTableRecord('clientes', id, { historial: historyUpdate });
 }
 
 // CRUD - Policies
-export function getPolicies(): Policy[] {
-  const db = readDB();
-  const tenantId = getActiveTenantId();
-  return db.polizas.filter(p => p.id_tenant === tenantId);
+export async function getPolicies(): Promise<Policy[]> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+  const res = await pool.query('SELECT * FROM polizas WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
+  // Map numeric strings back to floats/numbers for safety
+  return res.rows.map(row => ({
+    ...row,
+    suma_asegurada: parseFloat(row.suma_asegurada),
+    prima_neta: parseFloat(row.prima_neta),
+    gastos_emision: parseFloat(row.gastos_emision),
+    igv: parseFloat(row.igv),
+    prima_total: parseFloat(row.prima_total),
+    porcentaje_comision: parseFloat(row.porcentaje_comision),
+    comision_total: parseFloat(row.comision_total),
+  }));
 }
 
-export function getPolicyById(id: string): Policy | undefined {
-  const db = readDB();
-  return db.polizas.find(p => p.id === id && p.id_tenant === getActiveTenantId());
-}
-
-export function createPolicy(policy: Omit<Policy, 'id' | 'id_tenant'>, installments: number): { policy: Policy; schedule: PaymentSchedule[] } {
-  const db = readDB();
-  const tenantId = getActiveTenantId();
-  const policyId = `POL-${String(db.polizas.length + 1).padStart(3, '0')}`;
-  
-  const newPolicy: Policy = {
-    ...policy,
-    id: policyId,
-    id_tenant: tenantId
+export async function getPolicyById(id: string): Promise<Policy | undefined> {
+  await initializeDatabase();
+  const res = await pool.query('SELECT * FROM polizas WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
+  const row = res.rows[0];
+  if (!row) return undefined;
+  return {
+    ...row,
+    suma_asegurada: parseFloat(row.suma_asegurada),
+    prima_neta: parseFloat(row.prima_neta),
+    gastos_emision: parseFloat(row.gastos_emision),
+    igv: parseFloat(row.igv),
+    prima_total: parseFloat(row.prima_total),
+    porcentaje_comision: parseFloat(row.porcentaje_comision),
+    comision_total: parseFloat(row.comision_total),
   };
-  db.polizas.push(newPolicy);
+}
+
+export async function createPolicy(policy: Omit<Policy, 'id' | 'id_tenant'>, installments: number): Promise<{ policy: Policy; schedule: PaymentSchedule[] }> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
   
-  // Generate schedule automatically
+  const resIds = await pool.query('SELECT id FROM polizas ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+  const policyId = `POL-${String(nextNum).padStart(3, '0')}`;
+
+  const res = await pool.query(
+    `INSERT INTO polizas (id, id_tenant, id_cliente, compania_aseguradora, ramo, numero_poliza, suma_asegurada, deducibles, coberturas, prima_neta, gastos_emision, igv, prima_total, porcentaje_comision, comision_total, fecha_inicio, fecha_fin, estado, moneda, periodicidad) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING *`,
+    [
+      policyId, tenantId, policy.id_cliente, policy.compania_aseguradora, policy.ramo, policy.numero_poliza, 
+      policy.suma_asegurada, policy.deducibles, policy.coberturas, policy.prima_neta, policy.gastos_emision, 
+      policy.igv, policy.prima_total, policy.porcentaje_comision, policy.comision_total, policy.fecha_inicio, 
+      policy.fecha_fin, policy.estado || 'Vigente', policy.moneda || 'USD', policy.periodicidad || 'Anual'
+    ]
+  );
+
+  const newPolicy = {
+    ...res.rows[0],
+    suma_asegurada: parseFloat(res.rows[0].suma_asegurada),
+    prima_neta: parseFloat(res.rows[0].prima_neta),
+    gastos_emision: parseFloat(res.rows[0].gastos_emision),
+    igv: parseFloat(res.rows[0].igv),
+    prima_total: parseFloat(res.rows[0].prima_total),
+    porcentaje_comision: parseFloat(res.rows[0].porcentaje_comision),
+    comision_total: parseFloat(res.rows[0].comision_total),
+  };
+
+  // Generate schedule automatically in database
   const schedule: PaymentSchedule[] = [];
   const cuotaCliente = Number((newPolicy.prima_total / installments).toFixed(2));
   const comisionBroker = Number((newPolicy.comision_total / installments).toFixed(2));
   const startDay = new Date(newPolicy.fecha_inicio);
-  
+
+  const resCronogramas = await pool.query('SELECT count(*) FROM cronograma');
+  let startCronNum = parseInt(resCronogramas.rows[0].count) + 1;
+
   for (let i = 1; i <= installments; i++) {
     const dueDate = new Date(startDay);
     dueDate.setDate(dueDate.getDate() + (i - 1) * 30);
     
-    // Check if the due date is in the past compared to system date (June 5, 2026) to set state
     const systemDate = new Date('2026-06-05');
     let estadoPago: 'Pendiente' | 'Pagado' | 'Vencido' = 'Pendiente';
     if (dueDate < systemDate) {
-      estadoPago = 'Vencido'; // Standard default for unpaid past debts
+      estadoPago = 'Vencido';
     }
 
-    const pay: PaymentSchedule = {
-      id: `PAY-${String(db.cronograma.length + schedule.length + 1).padStart(3, '0')}`,
-      id_tenant: tenantId,
-      id_poliza: policyId,
-      numero_cuota: i,
-      monto_cuota_cliente: cuotaCliente,
-      comision_cuota_broker: comisionBroker,
-      fecha_vencimiento: dueDate.toISOString().split('T')[0],
-      estado_pago: estadoPago,
-      estado_comision: 'Pendiente'
-    };
-    schedule.push(pay);
+    const payId = `PAY-${String(startCronNum + i - 1).padStart(3, '0')}`;
+
+    const resPay = await pool.query(
+      `INSERT INTO cronograma (id, id_tenant, id_poliza, numero_cuota, monto_cuota_cliente, comision_cuota_broker, fecha_vencimiento, estado_pago, estado_comision) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        payId, tenantId, policyId, i, cuotaCliente, comisionBroker, 
+        dueDate.toISOString().split('T')[0], estadoPago, 'Pendiente'
+      ]
+    );
+
+    schedule.push({
+      ...resPay.rows[0],
+      monto_cuota_cliente: parseFloat(resPay.rows[0].monto_cuota_cliente),
+      comision_cuota_broker: parseFloat(resPay.rows[0].comision_cuota_broker),
+    });
   }
-  
-  db.cronograma.push(...schedule);
-  writeDB(db);
-  
-  // Log inside client history
-  addClientHistory(newPolicy.id_cliente, 'Póliza Registrada', `Se emitió la póliza ${newPolicy.numero_poliza} (${newPolicy.ramo}) con ${installments} cuotas.`);
-  
+
+  // Log in client history
+  await addClientHistory(newPolicy.id_cliente, 'Póliza Registrada', `Se emitió la póliza ${newPolicy.numero_poliza} (${newPolicy.ramo}) con ${installments} cuotas.`);
+
   return { policy: newPolicy, schedule };
 }
 
-export function updatePolicy(id: string, updatedFields: Partial<Omit<Policy, 'id' | 'id_tenant'>>): Policy {
-  const db = readDB();
-  const index = db.polizas.findIndex(p => p.id === id && p.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Póliza no encontrada');
-  
-  const updated = { ...db.polizas[index], ...updatedFields };
-  db.polizas[index] = updated;
-  writeDB(db);
-  return updated;
+export async function updatePolicy(id: string, updatedFields: Partial<Omit<Policy, 'id' | 'id_tenant'>>): Promise<Policy> {
+  const row = await updateTableRecord('polizas', id, updatedFields);
+  return {
+    ...row,
+    suma_asegurada: parseFloat(row.suma_asegurada),
+    prima_neta: parseFloat(row.prima_neta),
+    gastos_emision: parseFloat(row.gastos_emision),
+    igv: parseFloat(row.igv),
+    prima_total: parseFloat(row.prima_total),
+    porcentaje_comision: parseFloat(row.porcentaje_comision),
+    comision_total: parseFloat(row.comision_total),
+  };
 }
 
 // CRUD - Payment Schedules
-export function getPaymentSchedules(): PaymentSchedule[] {
-  const db = readDB();
-  const tenantId = getActiveTenantId();
-  return db.cronograma.filter(c => c.id_tenant === tenantId);
+export async function getPaymentSchedules(): Promise<PaymentSchedule[]> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+  const res = await pool.query('SELECT * FROM cronograma WHERE id_tenant = $1 ORDER BY fecha_vencimiento ASC, numero_cuota ASC', [tenantId]);
+  return res.rows.map(row => ({
+    ...row,
+    monto_cuota_cliente: parseFloat(row.monto_cuota_cliente),
+    comision_cuota_broker: parseFloat(row.comision_cuota_broker),
+  }));
 }
 
-export function updatePaymentStatus(id: string, estado_pago?: 'Pendiente' | 'Pagado' | 'Vencido', estado_comision?: 'Pendiente' | 'Cobrado'): PaymentSchedule {
-  const db = readDB();
-  const index = db.cronograma.findIndex(c => c.id === id && c.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Cuota no encontrada');
-  
-  if (estado_pago) {
-    db.cronograma[index].estado_pago = estado_pago;
-  }
-  if (estado_comision) {
-    db.cronograma[index].estado_comision = estado_comision;
-  }
-  writeDB(db);
-  return db.cronograma[index];
+export async function updatePaymentStatus(id: string, estado_pago?: 'Pendiente' | 'Pagado' | 'Vencido', estado_comision?: 'Pendiente' | 'Cobrado'): Promise<PaymentSchedule> {
+  await initializeDatabase();
+  const fieldsToUpdate: Record<string, any> = {};
+  if (estado_pago !== undefined) fieldsToUpdate.estado_pago = estado_pago;
+  if (estado_comision !== undefined) fieldsToUpdate.estado_comision = estado_comision;
+
+  const row = await updateTableRecord('cronograma', id, fieldsToUpdate);
+  return {
+    ...row,
+    monto_cuota_cliente: parseFloat(row.monto_cuota_cliente),
+    comision_cuota_broker: parseFloat(row.comision_cuota_broker),
+  };
 }
 
 // CRUD - Leads
-export function getLeads(): Lead[] {
-  const db = readDB();
-  return db.leads.filter(l => l.id_tenant === getActiveTenantId());
+export async function getLeads(): Promise<Lead[]> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+  const res = await pool.query('SELECT * FROM leads WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
+  return res.rows.map(row => ({
+    ...row,
+    prima_proyectada: parseFloat(row.prima_proyectada)
+  }));
 }
 
-export function createLead(lead: Omit<Lead, 'id' | 'id_tenant' | 'fecha_creacion'>): Lead {
-  const db = readDB();
-  const newLead: Lead = {
-    ...lead,
-    id: `LD-${String(db.leads.length + 1).padStart(3, '0')}`,
-    id_tenant: getActiveTenantId(),
-    fecha_creacion: new Date().toISOString().split('T')[0]
+export async function createLead(lead: Omit<Lead, 'id' | 'id_tenant' | 'fecha_creacion'>): Promise<Lead> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+
+  const resIds = await pool.query('SELECT id FROM leads ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+  const leadId = `LD-${String(nextNum).padStart(3, '0')}`;
+
+  const res = await pool.query(
+    `INSERT INTO leads (id, id_tenant, nombre, compania, documento, email, telefono, direccion, giro, estado, prima_proyectada, ramo, fecha_creacion) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+    [
+      leadId, tenantId, lead.nombre, lead.compania || '', lead.documento, lead.email, lead.telefono, 
+      lead.direccion, lead.giro, lead.estado || 'nuevo', lead.prima_proyectada, lead.ramo, 
+      new Date().toISOString().split('T')[0]
+    ]
+  );
+  return {
+    ...res.rows[0],
+    prima_proyectada: parseFloat(res.rows[0].prima_proyectada)
   };
-  db.leads.push(newLead);
-  writeDB(db);
-  return newLead;
 }
 
-export function updateLeadStatus(id: string, estado: Lead['estado']): Lead {
-  const db = readDB();
-  const index = db.leads.findIndex(l => l.id === id && l.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Lead no encontrado');
-  db.leads[index].estado = estado;
-  writeDB(db);
-  return db.leads[index];
+export async function updateLeadStatus(id: string, estado: Lead['estado']): Promise<Lead> {
+  const row = await updateTableRecord('leads', id, { estado });
+  return {
+    ...row,
+    prima_proyectada: parseFloat(row.prima_proyectada)
+  };
 }
 
-export function deleteLead(id: string) {
-  const db = readDB();
-  db.leads = db.leads.filter(l => !(l.id === id && l.id_tenant === getActiveTenantId()));
-  writeDB(db);
+export async function deleteLead(id: string): Promise<void> {
+  await initializeDatabase();
+  await pool.query('DELETE FROM leads WHERE id = $1 AND id_tenant = $2', [id, activeTenantId]);
 }
 
 // CRUD - Claims (Siniestros)
-export function getClaims(): Claim[] {
-  const db = readDB();
-  return db.siniestros.filter(s => s.id_tenant === getActiveTenantId());
+export async function getClaims(): Promise<Claim[]> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+  const res = await pool.query('SELECT * FROM siniestros WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
+  return res.rows;
 }
 
-export function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha_creacion' | 'bitacora'>): Claim {
-  const db = readDB();
-  const newClaim: Claim = {
-    ...claim,
-    id: `SIN-${String(db.siniestros.length + 1).padStart(3, '0')}`,
-    id_tenant: getActiveTenantId(),
-    fecha_creacion: new Date().toISOString().split('T')[0],
-    bitacora: [
-      {
-        fecha: new Date().toISOString().split('T')[0],
-        hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-        motivo: 'Apertura de Siniestro',
-        proximo_control: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 7 days from now
-      }
+export async function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha_creacion' | 'bitacora'>): Promise<Claim> {
+  await initializeDatabase();
+  const tenantId = activeTenantId;
+
+  const resIds = await pool.query('SELECT id FROM siniestros ORDER BY id DESC LIMIT 1');
+  const lastId = resIds.rows[0]?.id;
+  let nextNum = 1;
+  if (lastId) {
+    const num = Number(lastId.split('-')[1]);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+  const claimId = `SIN-${String(nextNum).padStart(3, '0')}`;
+
+  const initialBitacora = [
+    {
+      fecha: new Date().toISOString().split('T')[0],
+      hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+      motivo: 'Apertura de Siniestro',
+      proximo_control: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    }
+  ];
+
+  const res = await pool.query(
+    `INSERT INTO siniestros (id, id_tenant, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, fecha_creacion, bitacora) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [
+      claimId, tenantId, claim.id_poliza, claim.id_cliente, claim.fecha_evento, claim.tipo_siniestro, 
+      claim.ajustador || '', claim.estado || 'Reportado', new Date().toISOString().split('T')[0], 
+      JSON.stringify(initialBitacora)
     ]
-  };
-  db.siniestros.push(newClaim);
-  writeDB(db);
-  
-  // Log inside client history
-  addClientHistory(newClaim.id_cliente, 'Siniestro Declarado', `Se reportó siniestro (${newClaim.tipo_siniestro}) para póliza ID: ${newClaim.id_poliza}`);
-  
-  return newClaim;
+  );
+
+  // Log in client history
+  await addClientHistory(claim.id_cliente, 'Siniestro Declarado', `Se reportó siniestro (${claim.tipo_siniestro}) para póliza ID: ${claim.id_poliza}`);
+
+  return res.rows[0];
 }
 
-export function addClaimLog(claimId: string, motivo: string, proximo_control: string): Claim {
-  const db = readDB();
-  const index = db.siniestros.findIndex(s => s.id === claimId && s.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Siniestro no encontrado');
-  
-  db.siniestros[index].bitacora.push({
-    fecha: new Date().toISOString().split('T')[0],
-    hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-    motivo,
-    proximo_control
-  });
-  writeDB(db);
-  return db.siniestros[index];
+export async function addClaimLog(claimId: string, motivo: string, proximo_control: string): Promise<Claim> {
+  await initializeDatabase();
+  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, activeTenantId]);
+  const claim = resClaims.rows[0];
+  if (!claim) throw new Error('Siniestro no encontrado');
+
+  const bitacoraUpdated = [
+    ...claim.bitacora,
+    {
+      fecha: new Date().toISOString().split('T')[0],
+      hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+      motivo,
+      proximo_control
+    }
+  ];
+
+  return updateTableRecord('siniestros', claimId, { bitacora: bitacoraUpdated });
 }
 
-export function updateClaimStatus(claimId: string, estado: Claim['estado']): Claim {
-  const db = readDB();
-  const index = db.siniestros.findIndex(s => s.id === claimId && s.id_tenant === getActiveTenantId());
-  if (index === -1) throw new Error('Siniestro no encontrado');
-  
-  db.siniestros[index].estado = estado;
-  db.siniestros[index].bitacora.push({
-    fecha: new Date().toISOString().split('T')[0],
-    hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-    motivo: `Cambio de estado a: ${estado}`,
-    proximo_control: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  });
-  writeDB(db);
-  return db.siniestros[index];
+export async function updateClaimStatus(claimId: string, estado: Claim['estado']): Promise<Claim> {
+  await initializeDatabase();
+  const resClaims = await pool.query('SELECT * FROM siniestros WHERE id = $1 AND id_tenant = $2', [claimId, activeTenantId]);
+  const claim = resClaims.rows[0];
+  if (!claim) throw new Error('Siniestro no encontrado');
+
+  const bitacoraUpdated = [
+    ...claim.bitacora,
+    {
+      fecha: new Date().toISOString().split('T')[0],
+      hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+      motivo: `Cambio de estado a: ${estado}`,
+      proximo_control: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    }
+  ];
+
+  return updateTableRecord('siniestros', claimId, { estado, bitacora: bitacoraUpdated });
 }

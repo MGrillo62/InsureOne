@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getPaymentSchedules, updatePaymentStatus, readDB, writeDB, addClientHistory } from '@/lib/db';
+import { getPaymentSchedules, updatePaymentStatus } from '@/lib/db';
 
 export async function GET() {
   try {
-    const schedules = getPaymentSchedules();
+    const schedules = await getPaymentSchedules();
     return NextResponse.json(schedules);
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener cronogramas' }, { status: 500 });
@@ -19,46 +19,47 @@ export async function POST(request: Request) {
       if (!id) {
         return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
       }
-      const updated = updatePaymentStatus(id, estado_pago, estado_comision);
+      const updated = await updatePaymentStatus(id, estado_pago, estado_comision);
       return NextResponse.json({ success: true, item: updated });
     }
     
     if (action === 'importExcel') {
-      // Simulator for parsing excel rows and reconciling payments
-      // The importData will contain rows like: [{ policy_number, cuota_number, client_paid, commission_cobrada }]
-      // We look up the policy and update the schedule accordingly.
+      const { getPolicies } = await import('@/lib/db');
+      const policies = await getPolicies();
+      const schedules = await getPaymentSchedules();
       
-      const db = readDB();
       const updatedCount = { client: 0, broker: 0 };
       const logs: string[] = [];
       
       if (Array.isArray(importData)) {
         for (const row of importData) {
           const { policy_number, cuota_number, client_paid, commission_cobrada } = row;
-          // Find policy
-          const policy = db.polizas.find(p => p.numero_poliza === policy_number && p.id_tenant === db.activeTenantId);
+          
+          const policy = policies.find(p => p.numero_poliza === policy_number);
           if (policy) {
-            // Find specific payment cuota
-            const paymentIdx = db.cronograma.findIndex(
+            const schedule = schedules.find(
               c => c.id_poliza === policy.id && 
-                   c.numero_cuota === Number(cuota_number) && 
-                   c.id_tenant === db.activeTenantId
+                   c.numero_cuota === Number(cuota_number)
             );
             
-            if (paymentIdx !== -1) {
+            if (schedule) {
               let updated = false;
-              if (client_paid === 'Pagado' && db.cronograma[paymentIdx].estado_pago !== 'Pagado') {
-                db.cronograma[paymentIdx].estado_pago = 'Pagado';
+              let nextPago = schedule.estado_pago;
+              let nextComision = schedule.estado_comision;
+              
+              if (client_paid === 'Pagado' && schedule.estado_pago !== 'Pagado') {
+                nextPago = 'Pagado';
                 updatedCount.client++;
                 updated = true;
               }
-              if (commission_cobrada === 'Cobrado' && db.cronograma[paymentIdx].estado_comision !== 'Cobrado') {
-                db.cronograma[paymentIdx].estado_comision = 'Cobrado';
+              if (commission_cobrada === 'Cobrado' && schedule.estado_comision !== 'Cobrado') {
+                nextComision = 'Cobrado';
                 updatedCount.broker++;
                 updated = true;
               }
               
               if (updated) {
+                await updatePaymentStatus(schedule.id, nextPago, nextComision);
                 logs.push(`Póliza ${policy_number} Cuota ${cuota_number}: Conciliado exitosamente.`);
               }
             } else {
@@ -70,12 +71,12 @@ export async function POST(request: Request) {
         }
       }
       
-      writeDB(db);
       return NextResponse.json({ success: true, updatedCount, logs });
     }
     
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   } catch (error) {
+    console.error('Error in API cronograma:', error);
     return NextResponse.json({ error: 'Error al conciliar pagos' }, { status: 500 });
   }
 }
