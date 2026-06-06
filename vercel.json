@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "insureone-production.up.railway.app:path*"
+    }
+  ]
+}
