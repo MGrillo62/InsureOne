@@ -67,7 +67,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     async function fetchData() {
       try {
         const userRes = await fetch('/api/auth');
+        if (userRes.status === 401 || !userRes.ok) {
+          router.push('/login');
+          return;
+        }
         const userData = await userRes.json();
+        if (userData.error) {
+          router.push('/login');
+          return;
+        }
         setUser(userData);
         setProfileName(userData.nombre);
         setProfileEmail(userData.email);
@@ -78,10 +86,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setActiveTenantId(tenantsData.activeTenantId);
       } catch (err) {
         console.error('Error fetching layout data:', err);
+        router.push('/login');
       }
     }
     fetchData();
-  }, []);
+  }, [router]);
 
   // Handle active tenant switch
   const handleTenantChange = async (tenantId: string) => {
@@ -98,6 +107,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Submit Logout
+  const handleLogout = async () => {
+    try {
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST'
+      });
+      if (res.ok) {
+        router.push('/login');
+      }
+    } catch (err) {
+      console.error('Error signing out:', err);
     }
   };
 
@@ -290,7 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       Cambiar Contraseña
                     </li>
                     <div className="dropdown-divider" />
-                    <li className="dropdown-item" style={{ color: '#EF4444' }} onClick={() => { alert('Cierre de sesión simulado'); setProfileDropdownOpen(false); }}>
+                    <li className="dropdown-item" style={{ color: '#EF4444' }} onClick={handleLogout}>
                       <LogOut size={16} />
                       Cerrar Sesión
                     </li>

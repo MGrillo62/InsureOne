@@ -4,14 +4,11 @@ import path from 'path';
 
 // PostgreSQL connection pool
 const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error('DATABASE_URL no está definida en las variables de entorno (.env o .env.local)');
-}
 const pool = new Pool({
   connectionString,
-  ssl: {
+  ssl: connectionString ? {
     rejectUnauthorized: false
-  }
+  } : undefined
 });
 
 // Interface Types
@@ -153,6 +150,10 @@ let databaseInitialized = false;
 export async function initializeDatabase() {
   if (databaseInitialized) return;
 
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL no está definida en las variables de entorno (.env o .env.local)');
+  }
+
   try {
     // 1. Create tables if not exist
     await pool.query(`
@@ -258,6 +259,26 @@ export async function initializeDatabase() {
         fecha_creacion VARCHAR(10) NOT NULL,
         bitacora JSONB NOT NULL
       );
+      
+      CREATE TABLE IF NOT EXISTS reclamaciones (
+        id VARCHAR(30) PRIMARY KEY,
+        nombres VARCHAR(100) NOT NULL,
+        apellidos VARCHAR(100) NOT NULL,
+        tipo_documento VARCHAR(20) NOT NULL,
+        nro_documento VARCHAR(30) NOT NULL,
+        domicilio TEXT NOT NULL,
+        telefono VARCHAR(30) NOT NULL,
+        correo VARCHAR(150) NOT NULL,
+        representante VARCHAR(150),
+        tipo_bien VARCHAR(30) NOT NULL,
+        monto_reclamado NUMERIC(12, 2) NOT NULL,
+        descripcion_bien TEXT NOT NULL,
+        tipo_reclamacion VARCHAR(30) NOT NULL,
+        detalle TEXT NOT NULL,
+        pedido TEXT NOT NULL,
+        fecha_creacion VARCHAR(10) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // 2. Check if seeding is needed
@@ -357,10 +378,33 @@ export async function initializeDatabase() {
       `);
     }
 
+    // Ensure existing tenants have admin credentials seeded if they don't
+    await pool.query(`
+      UPDATE tenants SET admin_email = 'admin@insureone.com', admin_password = 'admin' WHERE id = 'T-001' AND (admin_email IS NULL OR admin_email = '');
+      UPDATE tenants SET admin_email = 'rimac@insureone.com', admin_password = 'rimac' WHERE id = 'T-002' AND (admin_email IS NULL OR admin_email = '');
+      UPDATE tenants SET admin_email = 'chiclayo@insureone.com', admin_password = 'chiclayo' WHERE id = 'T-003' AND (admin_email IS NULL OR admin_email = '');
+    `);
+
     databaseInitialized = true;
   } catch (err) {
     console.error('Error initializing Neon database:', err);
   }
+}
+
+export async function validateTenantCredentials(email: string, password: string): Promise<Tenant | null> {
+  await initializeDatabase();
+  
+  // Direct matching for superadmin alias
+  if ((email === 'admin@insureone.com' || email === 'superadmin') && (password === 'admin' || password === 'superadmin')) {
+    const res = await pool.query("SELECT * FROM tenants WHERE id = 'T-001'");
+    return res.rows[0] || null;
+  }
+  
+  const res = await pool.query(
+    "SELECT * FROM tenants WHERE (admin_email = $1 OR admin_email = $2) AND admin_password = $3 AND (estado = 'Activo' OR estado IS NULL)",
+    [email, email.toLowerCase(), password]
+  );
+  return res.rows[0] || null;
 }
 
 // Dynamic Helper for SQL updates
@@ -844,4 +888,52 @@ export async function updateClaimStatus(claimId: string, estado: Claim['estado']
   ];
 
   return updateTableRecord('siniestros', claimId, { estado, bitacora: bitacoraUpdated });
+}
+
+export interface Reclamacion {
+  id: string;
+  nombres: string;
+  apellidos: string;
+  tipo_documento: string;
+  nro_documento: string;
+  domicilio: string;
+  telefono: string;
+  correo: string;
+  representante?: string;
+  tipo_bien: string;
+  monto_reclamado: number;
+  descripcion_bien: string;
+  tipo_reclamacion: string;
+  detalle: string;
+  pedido: string;
+  fecha_creacion: string;
+}
+
+export async function createReclamacion(rec: Omit<Reclamacion, 'id' | 'fecha_creacion'>): Promise<Reclamacion> {
+  await initializeDatabase();
+  const dateStr = new Date().toISOString().split('T')[0];
+  const dateCompact = dateStr.replace(/-/g, '');
+  
+  const countRes = await pool.query(
+    "SELECT count(*) FROM reclamaciones WHERE fecha_creacion = $1",
+    [dateStr]
+  );
+  const nextNum = parseInt(countRes.rows[0].count) + 1;
+  const newId = `REC-${dateCompact}-${String(nextNum).padStart(3, '0')}`;
+
+  const res = await pool.query(
+    `INSERT INTO reclamaciones (id, nombres, apellidos, tipo_documento, nro_documento, domicilio, telefono, correo, representante, tipo_bien, monto_reclamado, descripcion_bien, tipo_reclamacion, detalle, pedido, fecha_creacion)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+    [
+      newId, rec.nombres, rec.apellidos, rec.tipo_documento, rec.nro_documento, rec.domicilio,
+      rec.telefono, rec.correo, rec.representante || null, rec.tipo_bien, rec.monto_reclamado,
+      rec.descripcion_bien, rec.tipo_reclamacion, rec.detalle, rec.pedido, dateStr
+    ]
+  );
+  
+  const row = res.rows[0];
+  return {
+    ...row,
+    monto_reclamado: parseFloat(row.monto_reclamado)
+  };
 }
