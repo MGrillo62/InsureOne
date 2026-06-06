@@ -1,0 +1,418 @@
+{
+  "tenants": [
+    {
+      "id": "T-001",
+      "nombre": "Mazmorra Games",
+      "ruc": "20601234567",
+      "razon_social": "Mazmorra Games S.A.C.",
+      "estado": "Activo",
+      "suscripcion_tipo": "Anual",
+      "fecha_inicio": "2026-01-01",
+      "fecha_fin": "2026-12-31",
+      "logo_url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60"
+    },
+    {
+      "id": "T-002",
+      "nombre": "Inversiones Rímac SAC",
+      "ruc": "20556789123",
+      "razon_social": "Inversiones Rímac S.A.C.",
+      "estado": "Activo",
+      "suscripcion_tipo": "Mensual",
+      "fecha_inicio": "2026-02-15",
+      "fecha_fin": "2027-02-14",
+      "logo_url": "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=80&auto=format&fit=crop&q=60"
+    },
+    {
+      "id": "T-003",
+      "nombre": "Importaciones Chiclayo",
+      "ruc": "20448976512",
+      "razon_social": "Importaciones Chiclayo E.I.R.L.",
+      "estado": "Suspendido",
+      "suscripcion_tipo": "Mensual",
+      "fecha_inicio": "2025-10-10",
+      "fecha_fin": "2026-04-09",
+      "logo_url": ""
+    }
+  ],
+  "currentUser": {
+    "id": "USR-001",
+    "nombre": "Super Admin",
+    "email": "admin@insureone.com",
+    "rol": "Superadmin",
+    "avatar": "SA",
+    "id_tenant": "T-001"
+  },
+  "activeTenantId": "T-001",
+  "clientes": [
+    {
+      "id": "CLI-001",
+      "id_tenant": "T-001",
+      "tipo": "natural",
+      "nombre": "Juan Perez Gomez",
+      "documento_tipo": "DNI",
+      "documento_numero": "45897612",
+      "email": "juan.perez@gmail.com",
+      "telefono": "998877665",
+      "direccion": "Av. Larco 456, Miraflores",
+      "historial": [
+        {
+          "fecha": "2026-05-10",
+          "accion": "Creación de Asegurado",
+          "nota": "Se registra cliente natural para seguro vehicular.",
+          "usuario": "Super Admin"
+        },
+        {
+          "fecha": "2026-06-06",
+          "accion": "Póliza Registrada",
+          "nota": "Se emitió la póliza 000459 (Vehicular) con 4 cuotas.",
+          "usuario": "Super Admin"
+        },
+        {
+          "fecha": "2026-06-06",
+          "accion": "WhatsApp Enviado",
+          "nota": "Mensaje de cobranza/renovación enviado: \"Estimado(a) Juan Perez Gomez,\n\nLe saludamos de InsureONE. Le recordamos que su c...\"",
+          "usuario": "Super Admin"
+        }
+      ]
+    },
+    {
+      "id": "CLI-002",
+      "id_tenant": "T-001",
+      "tipo": "natural",
+      "nombre": "María Perez Lopez",
+      "documento_tipo": "DNI",
+      "documento_numero": "70251489",
+      "email": "maria.perez@gmail.com",
+      "telefono": "987654321",
+      "direccion": "Av. Larco 456, Miraflores",
+      "id_parent": "CLI-001",
+      "historial": [
+        {
+          "fecha": "2026-05-11",
+          "accion": "Vinculación",
+          "nota": "Se vincula como dependiente (Cónyuge) de Juan Perez.",
+          "usuario": "Super Admin"
+        }
+      ]
+    },
+    {
+      "id": "CLI-003",
+      "id_tenant": "T-001",
+      "tipo": "juridica",
+      "nombre": "Constructora Alfa S.A.C.",
+      "documento_tipo": "RUC",
+      "documento_numero": "20601234567",
+      "email": "contacto@constructoraalfa.pe",
+      "telefono": "014455667",
+      "direccion": "Av. Primavera 1230, Surco",
+      "historial": [
+        {
+          "fecha": "2026-04-20",
+          "accion": "Creación de Asegurado",
+          "nota": "Cliente corporativo creado por recomendación de leads.",
+          "usuario": "Super Admin"
+        }
+      ]
+    },
+    {
+      "id": "CLI-004",
+      "id_tenant": "T-001",
+      "tipo": "natural",
+      "nombre": "Carlos Mendoza Ruiz",
+      "documento_tipo": "DNI",
+      "documento_numero": "10234567",
+      "email": "carlos.mendoza@alfa.pe",
+      "telefono": "994433221",
+      "direccion": "Calle Las Lomas 234, Surco",
+      "id_parent": "CLI-003",
+      "historial": [
+        {
+          "fecha": "2026-04-25",
+          "accion": "Vinculación de Empleado",
+          "nota": "Asegurado titular bajo póliza de SCTR corporativa de Constructora Alfa.",
+          "usuario": "Super Admin"
+        }
+      ]
+    }
+  ],
+  "polizas": [
+    {
+      "id": "POL-001",
+      "id_tenant": "T-001",
+      "id_cliente": "CLI-001",
+      "compania_aseguradora": "Rimac",
+      "ramo": "Vehicular",
+      "numero_poliza": "V-908754-2026",
+      "suma_asegurada": 25000,
+      "deducibles": "USD 150 todo riesgo, 10% de la pérdida",
+      "coberturas": "Daño propio, Responsabilidad Civil USD 100,000, Robo total",
+      "prima_neta": 1000,
+      "gastos_emision": 30,
+      "igv": 185.4,
+      "prima_total": 1215.4,
+      "porcentaje_comision": 15,
+      "comision_total": 150,
+      "fecha_inicio": "2026-05-10",
+      "fecha_fin": "2027-05-09",
+      "estado": "Vigente"
+    },
+    {
+      "id": "POL-002",
+      "id_tenant": "T-001",
+      "id_cliente": "CLI-003",
+      "compania_aseguradora": "Pacifico",
+      "ramo": "EPS",
+      "numero_poliza": "E-334455-2026",
+      "suma_asegurada": 100000,
+      "deducibles": "Copago S/ 40 en clínicas afiliadas, 10% coaseguro",
+      "coberturas": "Atención ambulatoria, hospitalaria, emergencias 100%, maternidad",
+      "prima_neta": 4000,
+      "gastos_emision": 120,
+      "igv": 741.6,
+      "prima_total": 4861.6,
+      "porcentaje_comision": 10,
+      "comision_total": 400,
+      "fecha_inicio": "2026-06-01",
+      "fecha_fin": "2027-05-31",
+      "estado": "Vigente"
+    },
+    {
+      "id": "POL-003",
+      "id_tenant": "T-001",
+      "id_cliente": "CLI-001",
+      "compania_aseguradora": "Mapfre",
+      "ramo": "Vida",
+      "numero_poliza": "VI-887722-2025",
+      "suma_asegurada": 50000,
+      "deducibles": "Sin deducible",
+      "coberturas": "Fallecimiento natural o accidental, invalidez permanente",
+      "prima_neta": 300,
+      "gastos_emision": 9,
+      "igv": 55.62,
+      "prima_total": 364.62,
+      "porcentaje_comision": 20,
+      "comision_total": 60,
+      "fecha_inicio": "2025-06-20",
+      "fecha_fin": "2026-06-19",
+      "estado": "Por Vencer"
+    },
+    {
+      "id_cliente": "CLI-001",
+      "compania_aseguradora": "Rimac",
+      "ramo": "Vehicular",
+      "numero_poliza": "000459",
+      "suma_asegurada": 0,
+      "deducibles": "",
+      "coberturas": "Daño Propio, Responsabilidad Civil, Robo Total",
+      "prima_neta": 1000,
+      "gastos_emision": 30,
+      "igv": 185.4,
+      "prima_total": 1215.4,
+      "porcentaje_comision": 15,
+      "comision_total": 150,
+      "fecha_inicio": "2026-06-23",
+      "fecha_fin": "2027-06-23",
+      "id": "POL-004",
+      "id_tenant": "T-001",
+      "moneda": "USD",
+      "periodicidad": "Anual"
+    }
+  ],
+  "cronograma": [
+    {
+      "id": "PAY-001",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-001",
+      "numero_cuota": 1,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-06-09",
+      "estado_pago": "Pagado",
+      "estado_comision": "Cobrado"
+    },
+    {
+      "id": "PAY-002",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-001",
+      "numero_cuota": 2,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-07-09",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-003",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-001",
+      "numero_cuota": 3,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-08-09",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-004",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-001",
+      "numero_cuota": 4,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-09-09",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-005",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-002",
+      "numero_cuota": 1,
+      "monto_cuota_cliente": 2430.8,
+      "comision_cuota_broker": 200,
+      "fecha_vencimiento": "2026-06-01",
+      "estado_pago": "Pagado",
+      "estado_comision": "Cobrado"
+    },
+    {
+      "id": "PAY-006",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-002",
+      "numero_cuota": 2,
+      "monto_cuota_cliente": 2430.8,
+      "comision_cuota_broker": 200,
+      "fecha_vencimiento": "2026-07-01",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-007",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-003",
+      "numero_cuota": 1,
+      "monto_cuota_cliente": 364.62,
+      "comision_cuota_broker": 60,
+      "fecha_vencimiento": "2025-07-20",
+      "estado_pago": "Pagado",
+      "estado_comision": "Cobrado"
+    },
+    {
+      "id": "PAY-008",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-004",
+      "numero_cuota": 1,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-06-23",
+      "estado_pago": "Pagado",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-009",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-004",
+      "numero_cuota": 2,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-07-23",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-010",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-004",
+      "numero_cuota": 3,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-08-22",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    },
+    {
+      "id": "PAY-011",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-004",
+      "numero_cuota": 4,
+      "monto_cuota_cliente": 303.85,
+      "comision_cuota_broker": 37.5,
+      "fecha_vencimiento": "2026-09-21",
+      "estado_pago": "Pendiente",
+      "estado_comision": "Pendiente"
+    }
+  ],
+  "leads": [
+    {
+      "id": "LD-001",
+      "id_tenant": "T-001",
+      "nombre": "Ricardo Samaniego",
+      "compania": "Minera Los Andes",
+      "documento": "20608976541",
+      "email": "rsamaniego@andes.pe",
+      "telefono": "992345678",
+      "direccion": "Av. Javier Prado Este 2500, San Borja",
+      "giro": "Minería",
+      "estado": "nuevo",
+      "prima_proyectada": 12000,
+      "ramo": "SCTR",
+      "fecha_creacion": "2026-06-01"
+    },
+    {
+      "id": "LD-002",
+      "id_tenant": "T-001",
+      "nombre": "Ana Sofía Vergara",
+      "compania": "Estudio Vergara & Abogados",
+      "documento": "20556789123",
+      "email": "avergara@estudiovergara.pe",
+      "telefono": "988776655",
+      "direccion": "Av. Camino Real 450, San Isidro",
+      "giro": "Legal",
+      "estado": "contactado",
+      "prima_proyectada": 5000,
+      "ramo": "Multirriesgo",
+      "fecha_creacion": "2026-06-02"
+    },
+    {
+      "id": "LD-003",
+      "id_tenant": "T-001",
+      "nombre": "Roberto Gutierrez",
+      "compania": "Roberto Gutierrez SAC",
+      "documento": "20123456789",
+      "email": "rgutierrez@gmail.com",
+      "telefono": "999888777",
+      "direccion": "Av. Benavides 1430, Miraflores",
+      "giro": "Comercio",
+      "estado": "cotizando",
+      "prima_proyectada": 1500,
+      "ramo": "Vehicular",
+      "fecha_creacion": "2026-06-03"
+    }
+  ],
+  "siniestros": [
+    {
+      "id": "SIN-001",
+      "id_tenant": "T-001",
+      "id_poliza": "POL-001",
+      "id_cliente": "CLI-001",
+      "fecha_evento": "2026-05-28",
+      "tipo_siniestro": "Choque Vehicular Leve",
+      "ajustador": "Roberto Quiroz (Rimac)",
+      "estado": "En Evaluacion",
+      "fecha_creacion": "2026-05-29",
+      "bitacora": [
+        {
+          "fecha": "2026-05-29",
+          "motivo": "Apertura de Siniestro",
+          "hora": "09:30 AM",
+          "proximo_control": "2026-06-05"
+        },
+        {
+          "fecha": "2026-06-02",
+          "motivo": "Envío de cotización de taller",
+          "hora": "03:15 PM",
+          "proximo_control": "2026-06-09"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,497 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Shield, 
+  Plus, 
+  Search, 
+  Building2, 
+  Globe, 
+  FileText, 
+  CheckCircle, 
+  AlertTriangle, 
+  XCircle, 
+  Calendar, 
+  Edit2, 
+  RefreshCw,
+  Info
+} from 'lucide-react';
+
+interface Tenant {
+  id: string;
+  nombre: string;
+  ruc: string;
+  razon_social: string;
+  estado: 'Activo' | 'Suspendido' | 'Eliminado';
+  suscripcion_tipo: 'Mensual' | 'Anual';
+  fecha_inicio: string;
+  fecha_fin: string;
+  logo_url?: string;
+}
+
+export default function ConfiguracionPage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [activeTenantId, setActiveTenantId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Modal and Form States
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
+
+  // Form Fields
+  const [nombre, setNombre] = useState('');
+  const [razonSocial, setRazonSocial] = useState('');
+  const [ruc, setRuc] = useState('');
+  const [estado, setEstado] = useState<'Activo' | 'Suspendido' | 'Eliminado'>('Activo');
+  const [suscripcionTipo, setSuscripcionTipo] = useState<'Mensual' | 'Anual'>('Anual');
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+
+  const fetchTenants = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/tenants');
+      if (res.ok) {
+        const data = await res.json();
+        setTenants(data.tenants || []);
+        setActiveTenantId(data.activeTenantId || '');
+      }
+    } catch (err) {
+      console.error('Error fetching tenants:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  const formatDateToLocal = (dateStr: string): string => {
+    if (!dateStr) return '';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
+  const handleEdit = (t: Tenant) => {
+    setEditingTenantId(t.id);
+    setNombre(t.nombre);
+    setRazonSocial(t.razon_social || '');
+    setRuc(t.ruc || '');
+    setEstado(t.estado || 'Activo');
+    setSuscripcionTipo(t.suscripcion_tipo || 'Anual');
+    setFechaInicio(t.fecha_inicio || '');
+    setFechaFin(t.fecha_fin || '');
+    setLogoUrl(t.logo_url || '');
+    setModalOpen(true);
+  };
+
+  const handleCreateNew = () => {
+    setEditingTenantId(null);
+    setNombre('');
+    setRazonSocial('');
+    setRuc('');
+    setEstado('Activo');
+    setSuscripcionTipo('Anual');
+    
+    // Set default dates
+    const today = new Date().toISOString().split('T')[0];
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    const end = nextYear.toISOString().split('T')[0];
+    
+    setFechaInicio(today);
+    setFechaFin(end);
+    setLogoUrl('');
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditingTenantId(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!nombre || !ruc || !razonSocial || !fechaInicio || !fechaFin) {
+      alert('Por favor complete todos los campos obligatorios.');
+      return;
+    }
+
+    if (ruc.length !== 11 || !/^\d+$/.test(ruc)) {
+      alert('El RUC debe constar de exactamente 11 dígitos numéricos.');
+      return;
+    }
+
+    if (new Date(fechaFin) < new Date(fechaInicio)) {
+      alert('La fecha de término de la suscripción no puede ser anterior a la de inicio.');
+      return;
+    }
+
+    try {
+      const payload = {
+        action: editingTenantId ? 'update' : 'create',
+        id: editingTenantId || undefined,
+        tenant: {
+          nombre,
+          razon_social: razonSocial,
+          ruc,
+          estado,
+          suscripcion_tipo: suscripcionTipo,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          logo_url: logoUrl
+        }
+      };
+
+      const res = await fetch('/api/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        fetchTenants();
+        handleCloseModal();
+      } else {
+        const data = await res.json();
+        alert(`Error: ${data.error || 'No se pudo guardar el tenant'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error en la conexión con el servidor.');
+    }
+  };
+
+  const filteredTenants = tenants.filter(t => 
+    t.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.razon_social.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.ruc.includes(searchTerm)
+  );
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '15px' }}>
+        <RefreshCw size={36} className="animate-blink-update" style={{ color: '#2563EB' }} />
+        <span style={{ color: '#64748B', fontSize: '14px', fontWeight: 500 }}>Cargando configuración de Tenants...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fade-in">
+      {/* Header bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Shield size={24} style={{ color: '#2563EB' }} />
+            Configuración de Tenants (Superadmin)
+          </h1>
+          <p style={{ color: '#64748B', fontSize: '14px', marginTop: '4px' }}>
+            Audita, edita y registra las cuentas de los corredores de seguros autorizados para utilizar la plataforma.
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={handleCreateNew}>
+          <Plus size={16} />
+          Registrar nuevo Tenant
+        </button>
+      </div>
+
+      {/* Superadmin Alert */}
+      <div className="premium-card" style={{ display: 'flex', gap: '15px', padding: '16px 24px', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF', alignItems: 'flex-start', marginBottom: '25px' }}>
+        <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: '#2563EB', flexShrink: 0 }}>
+          <Info size={18} />
+        </div>
+        <div>
+          <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
+          <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
+            Como Superusuario de InsureOne, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
+          </p>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="premium-card" style={{ padding: '15px 20px', marginBottom: '25px' }}>
+        <div className="search-input-wrapper">
+          <Search size={18} className="search-icon" style={{ top: '12px' }} />
+          <input 
+            type="text" 
+            placeholder="Buscar por nombre de tenant, Razón Social o RUC..." 
+            className="form-input search-input" 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Tenants Grid/Table */}
+      <div className="premium-card">
+        <div className="table-responsive">
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Logo</th>
+                <th>Nombre Comercial</th>
+                <th>Razón Social</th>
+                <th>RUC</th>
+                <th>Tipo Suscripción</th>
+                <th>Vigencia (Inicio - Fin)</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTenants.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                    No se encontraron tenants que coincidan con la búsqueda.
+                  </td>
+                </tr>
+              ) : (
+                filteredTenants.map((t) => {
+                  const isActiveTenant = t.id === activeTenantId;
+                  return (
+                    <tr key={t.id} style={{ backgroundColor: isActiveTenant ? 'rgba(37, 99, 235, 0.03)' : undefined }}>
+                      <td>
+                        {t.logo_url ? (
+                          <img 
+                            src={t.logo_url} 
+                            alt={`Logo ${t.nombre}`} 
+                            style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #E2E8F0' }} 
+                          />
+                        ) : (
+                          <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', border: '1px solid #E2E8F0' }}>
+                            {t.nombre.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 600, color: '#0F172A' }}>{t.nombre}</span>
+                          <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 500 }}>ID: {t.id} {isActiveTenant && '(Activo en sesión)'}</span>
+                        </div>
+                      </td>
+                      <td>{t.razon_social || '-'}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '12.5px' }}>{t.ruc || '-'}</td>
+                      <td>
+                        <span className="badge badge-secondary">{t.suscripcion_tipo}</span>
+                      </td>
+                      <td style={{ fontSize: '12.5px', color: '#475569' }}>
+                        <div>{formatDateToLocal(t.fecha_inicio)}</div>
+                        <div style={{ fontSize: '11px', color: '#94A3B8' }}>hasta {formatDateToLocal(t.fecha_fin)}</div>
+                      </td>
+                      <td>
+                        <span className={`badge ${
+                          t.estado === 'Activo' ? 'badge-success' :
+                          t.estado === 'Suspendido' ? 'badge-warning' : 'badge-danger'
+                        }`}>
+                          {t.estado.toUpperCase()}
+                        </span>
+                      </td>
+                      <td>
+                        <button 
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => handleEdit(t)}
+                        >
+                          <Edit2 size={12} />
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* CREATE / EDIT TENANT MODAL */}
+      {modalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3 className="modal-title">{editingTenantId ? 'Editar Configuración de Tenant' : 'Registrar Nuevo Tenant'}</h3>
+              <button className="modal-close-btn" onClick={handleCloseModal}>&times;</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
+                
+                {/* Form fields */}
+                <div>
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">Nombre Comercial *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ej. Rimac Corredores" 
+                        value={nombre} 
+                        onChange={(e) => setNombre(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Razón Social *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ej. Rímac Corredores de Seguros S.A." 
+                        value={razonSocial} 
+                        onChange={(e) => setRazonSocial(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">RUC (11 dígitos) *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ej. 20601234567" 
+                        maxLength={11}
+                        value={ruc} 
+                        onChange={(e) => setRuc(e.target.value.replace(/\D/g, ''))} 
+                        required 
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Logo URL</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="https://ejemplo.com/logo.png" 
+                        value={logoUrl} 
+                        onChange={(e) => setLogoUrl(e.target.value)} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">Estado del Inquilino *</label>
+                      <select 
+                        className="form-input" 
+                        value={estado} 
+                        onChange={(e: any) => setEstado(e.target.value)}
+                      >
+                        <option value="Activo">Activo (Acceso completo)</option>
+                        <option value="Suspendido">Suspendido (Modo lectura/bloqueado)</option>
+                        <option value="Eliminado">Eliminado (Sin acceso)</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Tipo de Suscripción *</label>
+                      <select 
+                        className="form-input" 
+                        value={suscripcionTipo} 
+                        onChange={(e: any) => setSuscripcionTipo(e.target.value)}
+                      >
+                        <option value="Mensual">Mensual (Facturación recurrente)</option>
+                        <option value="Anual">Anual (Facturación anualizada)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label className="form-label">Fecha de Inicio de Suscripción *</label>
+                      <input 
+                        type="date" 
+                        className="form-input" 
+                        value={fechaInicio} 
+                        onChange={(e) => setFechaInicio(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Fecha de Fin de Suscripción *</label>
+                      <input 
+                        type="date" 
+                        className="form-input" 
+                        min={fechaInicio}
+                        value={fechaFin} 
+                        onChange={(e) => setFechaFin(e.target.value)} 
+                        required 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info and Preview card */}
+                <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: 'var(--radius-lg)', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <h4 style={{ fontSize: '14px', color: '#0F172A', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Building2 size={16} style={{ color: '#2563EB' }} />
+                    Vista Previa de Marca Corporativa
+                  </h4>
+
+                  {/* Mock Branding Preview Card */}
+                  <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+                    {logoUrl ? (
+                      <img 
+                        src={logoUrl} 
+                        alt="Preview Logo" 
+                        style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #E2E8F0', padding: '2px' }}
+                        onError={(e) => {
+                          (e.target as any).src = 'https://placehold.co/80x80/f1f5f9/64748b?text=InsureOne';
+                        }}
+                      />
+                    ) : (
+                      <div style={{ width: '80px', height: '80px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', border: '2px solid #E2E8F0' }}>
+                        {nombre ? nombre.substring(0, 2).toUpperCase() : 'IO'}
+                      </div>
+                    )}
+
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '15px', color: '#0F172A', display: 'block' }}>
+                        {nombre || 'Nombre del Tenant'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                        RUC: {ruc || '-----------------'}
+                      </span>
+                    </div>
+
+                    <div style={{ width: '100%', borderTop: '1px dashed #E2E8F0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: '#64748B' }}>Suscripción:</span>
+                      <span style={{ fontWeight: 600, color: '#0F172A' }}>{suscripcionTipo}</span>
+                    </div>
+
+                    <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: '#64748B' }}>Vence el:</span>
+                      <span style={{ fontWeight: 600, color: '#0F172A' }}>{fechaFin ? formatDateToLocal(fechaFin) : '--/--/----'}</span>
+                    </div>
+                  </div>
+
+                  {/* Warning label */}
+                  <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: 'auto' }}>
+                    <AlertTriangle size={16} style={{ color: '#D97706', marginTop: '2px', flexShrink: 0 }} />
+                    <span style={{ fontSize: '11.5px', color: '#92400E', lineHeight: '1.4' }}>
+                      <strong>Advertencia de Seguridad:</strong> Al suspender a un Tenant, los usuarios afiliados ya no podrán facturar ni modificar pólizas, solo podrán realizar lecturas.
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">
+                  {editingTenantId ? 'Guardar Cambios' : 'Crear Cuenta Tenant'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
