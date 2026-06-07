@@ -21,7 +21,8 @@ import {
   ChevronDown,
   Upload,
   CheckCircle,
-  XCircle
+  XCircle,
+  History
 } from 'lucide-react';
 
 interface Client {
@@ -50,6 +51,19 @@ interface Policy {
   estado: 'Vigente' | 'Por Vencer' | 'Vencida' | 'Anulada';
   moneda?: 'USD' | 'PEN';
   periodicidad?: 'Anual' | 'Semestral' | 'Mensual';
+}
+
+interface Claim {
+  id: string;
+  id_tenant: string;
+  id_poliza: string;
+  id_cliente: string;
+  fecha_evento: string;
+  tipo_siniestro: string;
+  ajustador: string;
+  estado: 'Reportado' | 'En Evaluacion' | 'Documentacion Pendiente' | 'Liquidado' | 'Rechazado';
+  fecha_creacion: string;
+  monto_siniestro: number;
 }
 
 const ASEGURADORAS_CATALOGO = [
@@ -407,6 +421,7 @@ export default function PolizasPage() {
   };
 
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [activeTab, setActiveTab] = useState<'lista' | 'catalogo' | 'renovaciones'>('lista');
   const [searchTerm, setSearchTerm] = useState('');
@@ -565,6 +580,11 @@ export default function PolizasPage() {
       if (cliRes.ok) {
         const cliData = await cliRes.json();
         setClients(cliData);
+      }
+      const claimsRes = await fetch('/api/siniestros');
+      if (claimsRes.ok) {
+        const claimsData = await claimsRes.json();
+        setClaims(claimsData);
       }
       await fetchAseguradoras();
     } catch (err) {
@@ -816,6 +836,64 @@ export default function PolizasPage() {
   const formatCurrency = (val: number, cur?: 'USD' | 'PEN') => {
     const symbol = cur === 'PEN' ? 'S/.' : 'USD';
     return `${symbol} ${val.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
+
+  // Helper to calculate loss ratio metrics for selected policy
+  const getPolicyLossRatioMetrics = () => {
+    if (!editPolicyId) return null;
+    const editingPolicy = policies.find(p => p.id === editPolicyId);
+    if (!editingPolicy) return null;
+
+    const getBasePolicyNumber = (num: string) => {
+      if (!num) return '';
+      const parts = num.split('-');
+      if (parts.length > 1) {
+        const last = parts[parts.length - 1];
+        if (/^\d{4}$/.test(last) || /^\d+$/.test(last)) {
+          return parts.slice(0, -1).join('-');
+        }
+      }
+      return num;
+    };
+
+    const baseNumber = getBasePolicyNumber(editingPolicy.numero_poliza);
+    const relatedPolicies = policies.filter(p => 
+      p.id_cliente === editingPolicy.id_cliente &&
+      p.ramo === editingPolicy.ramo &&
+      getBasePolicyNumber(p.numero_poliza) === baseNumber
+    );
+
+    // Current term claims & loss ratio (Liquidado only)
+    const currentClaims = claims.filter(c => c.id_poliza === editingPolicy.id && c.estado === 'Liquidado');
+    const currentClaimsSum = currentClaims.reduce((sum, c) => sum + c.monto_siniestro, 0);
+    const currentNetPremium = editingPolicy.prima_neta || 0;
+    const currentLossRatio = currentNetPremium > 0 ? (currentClaimsSum / currentNetPremium) * 100 : 0;
+
+    // Accumulated claims & loss ratio (Liquidado only)
+    const relatedPolicyIds = relatedPolicies.map(p => p.id);
+    const accumulatedClaims = claims.filter(c => relatedPolicyIds.includes(c.id_poliza) && c.estado === 'Liquidado');
+    const accumulatedClaimsSum = accumulatedClaims.reduce((sum, c) => sum + c.monto_siniestro, 0);
+    const accumulatedNetPremium = relatedPolicies.reduce((sum, p) => sum + (p.prima_neta || 0), 0);
+    const accumulatedLossRatio = accumulatedNetPremium > 0 ? (accumulatedClaimsSum / accumulatedNetPremium) * 100 : 0;
+
+    // Ordered related policies (vigencias anteriores) - from most recent to oldest, excluding the current one
+    const previousTerms = relatedPolicies
+      .filter(p => p.id !== editingPolicy.id)
+      .sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
+
+    return {
+      editingPolicy,
+      baseNumber,
+      relatedPolicies,
+      currentClaims,
+      currentClaimsSum,
+      currentLossRatio,
+      accumulatedClaims,
+      accumulatedClaimsSum,
+      accumulatedLossRatio,
+      previousTerms,
+      moneda: editingPolicy.moneda || 'USD'
+    };
   };
 
   // Autocomplete filtering logic
@@ -1124,6 +1202,35 @@ export default function PolizasPage() {
               <button className="modal-close-btn" onClick={handleCloseModal}>&times;</button>
             </div>
             <form onSubmit={handleSubmitPolicy}>
+              {/* Header Cards for Siniestralidad (Only when editing an existing policy) */}
+              {(() => {
+                const metrics = getPolicyLossRatioMetrics();
+                if (!metrics) return null;
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '20px 24px 0 24px' }}>
+                    <div style={{ background: '#FFFFFF', padding: '16px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', borderLeft: '4px solid #3B82F6', boxShadow: 'var(--shadow-sm)' }}>
+                      <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Siniestralidad Póliza Vigente</div>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626', marginTop: '4px', fontFamily: 'var(--font-title)' }}>
+                        {metrics.currentLossRatio.toFixed(2)}%
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
+                        Siniestros: {metrics.moneda} {metrics.currentClaimsSum.toLocaleString('en-US', { minimumFractionDigits: 2 })} / Prima Neta: {metrics.moneda} {metrics.editingPolicy.prima_neta.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: '#FFFFFF', padding: '16px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', borderLeft: '4px solid #8B5CF6', boxShadow: 'var(--shadow-sm)' }}>
+                      <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Siniestralidad Acumulada (Histórica)</div>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626', marginTop: '4px', fontFamily: 'var(--font-title)' }}>
+                        {metrics.accumulatedLossRatio.toFixed(2)}%
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
+                        Siniestros: {metrics.moneda} {metrics.accumulatedClaimsSum.toLocaleString('en-US', { minimumFractionDigits: 2 })} / Prima Neta: {metrics.moneda} {metrics.relatedPolicies.reduce((s, p) => s + (p.prima_neta || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              
               <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
                 
                 {/* Left side: Form fields */}
@@ -1483,6 +1590,70 @@ export default function PolizasPage() {
                 </div>
 
               </div>
+
+              {/* Grilla de Vigencias Anteriores */}
+              {editPolicyId && (() => {
+                const metrics = getPolicyLossRatioMetrics();
+                if (!metrics || metrics.previousTerms.length === 0) return null;
+                return (
+                  <div style={{ padding: '0 24px 20px 24px', borderTop: '1px solid #E2E8F0', marginTop: '20px', paddingTop: '20px' }}>
+                    <h4 style={{ fontSize: '14px', color: '#0F172A', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <History size={16} style={{ color: '#2563EB' }} />
+                      Vigencias / Renovaciones Anteriores
+                    </h4>
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                      <table className="premium-table" style={{ fontSize: '12px', margin: 0 }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#F8FAFC' }}>
+                            <th>Nro de Póliza</th>
+                            <th>Periodo / Vigencia</th>
+                            <th>Aseguradora</th>
+                            <th>Suma Asegurada</th>
+                            <th>Prima Neta</th>
+                            <th>Prima Total</th>
+                            <th>Comisión Total</th>
+                            <th>Siniestros Liquidados</th>
+                            <th>Siniestralidad</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {metrics.previousTerms.map((term) => {
+                            const termClaims = claims.filter(c => c.id_poliza === term.id && c.estado === 'Liquidado');
+                            const termClaimsSum = termClaims.reduce((s, c) => s + c.monto_siniestro, 0);
+                            const termLossRatio = term.prima_neta > 0 ? (termClaimsSum / term.prima_neta) * 100 : 0;
+                            return (
+                              <tr key={term.id}>
+                                <td style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{term.numero_poliza}</td>
+                                <td>{formatDateToLocal(term.fecha_inicio)} al {formatDateToLocal(term.fecha_fin)}</td>
+                                <td>{term.compania_aseguradora}</td>
+                                <td>{formatCurrency(term.suma_asegurada, term.moneda || 'USD')}</td>
+                                <td>{formatCurrency(term.prima_neta, term.moneda || 'USD')}</td>
+                                <td>{formatCurrency(term.prima_total, term.moneda || 'USD')}</td>
+                                <td>{formatCurrency(term.comision_total, term.moneda || 'USD')}</td>
+                                <td>
+                                  {termClaims.length > 0 ? (
+                                    <span style={{ fontWeight: 600, color: '#DC2626' }}>
+                                      {formatCurrency(termClaimsSum, term.moneda || 'USD')} ({termClaims.length})
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#64748B' }}>{term.moneda || 'USD'} 0.00 (0)</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: termLossRatio > 50 ? '#FEE2E2' : '#F1F5F9', color: termLossRatio > 50 ? '#EF4444' : '#475569', fontWeight: 600 }}>
+                                    {termLossRatio.toFixed(2)}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">

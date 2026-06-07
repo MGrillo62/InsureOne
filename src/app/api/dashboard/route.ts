@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getPolicies, getPaymentSchedules } from '@/lib/db';
+import { getPolicies, getPaymentSchedules, getClaims } from '@/lib/db';
 
 export async function GET() {
   try {
     const policies = await getPolicies();
     const schedules = await getPaymentSchedules();
+    const claims = await getClaims();
     
     // 1. Total Primas Intermediadas (Suma de prima_total de todas las pólizas vigentes y por vencer)
     const activePolicies = policies.filter(p => p.estado === 'Vigente' || p.estado === 'Por Vencer');
@@ -22,7 +23,6 @@ export async function GET() {
     const retentionRate = totalStatusCount > 0 ? Math.round((activeCount / totalStatusCount) * 100) : 100;
     
     // 4. Cobranzas pendientes del mes actual (Junio 2026 - las de fecha '2026-06-XX' con estado 'Pendiente' o 'Vencido')
-    // Let's filter dates with '2026-06-'
     const pendingCollectionsThisMonth = schedules
       .filter(s => s.fecha_vencimiento.startsWith('2026-06-') && (s.estado_pago === 'Pendiente' || s.estado_pago === 'Vencido'))
       .reduce((sum, s) => sum + s.monto_cuota_cliente, 0);
@@ -56,6 +56,19 @@ export async function GET() {
       name: key,
       value: Number(shareByRamo[key].toFixed(2))
     }));
+
+    // 9. Siniestralidad de Cartera Vigente (Siniestros Liquidados en vigencias actuales / Primas Netas vigencias actuales)
+    const activePolicyIds = new Set(activePolicies.map(p => p.id));
+    const activeClaims = claims.filter(c => activePolicyIds.has(c.id_poliza) && c.estado === 'Liquidado');
+    const totalMontoSiniestrosVigentes = activeClaims.reduce((sum, c) => sum + c.monto_siniestro, 0);
+    const totalPrimasNetasVigentes = activePolicies.reduce((sum, p) => sum + p.prima_neta, 0);
+    const siniestralidadVigente = totalPrimasNetasVigentes > 0 ? (totalMontoSiniestrosVigentes / totalPrimasNetasVigentes) * 100 : 0;
+
+    // 10. Siniestralidad Acumulada Cartera (Total Siniestros Liquidados / Total Primas Netas)
+    const liquidatedClaims = claims.filter(c => c.estado === 'Liquidado');
+    const totalMontoSiniestrosAcumulados = liquidatedClaims.reduce((sum, c) => sum + c.monto_siniestro, 0);
+    const totalPrimasNetasAcumuladas = policies.reduce((sum, p) => sum + p.prima_neta, 0);
+    const siniestralidadAcumulada = totalPrimasNetasAcumuladas > 0 ? (totalMontoSiniestrosAcumulados / totalPrimasNetasAcumuladas) * 100 : 0;
     
     return NextResponse.json({
       primasIntermediadas: Number(primasIntermediadas.toFixed(2)),
@@ -66,7 +79,13 @@ export async function GET() {
       cobrosRecibidos: Number(cobrosRecibidos.toFixed(2)),
       vencimientosMes,
       shareByInsurer: shareByInsurerArray,
-      shareByRamo: shareByRamoArray
+      shareByRamo: shareByRamoArray,
+      siniestralidadVigente: Number(siniestralidadVigente.toFixed(2)),
+      siniestralidadAcumulada: Number(siniestralidadAcumulada.toFixed(2)),
+      totalMontoSiniestrosVigentes: Number(totalMontoSiniestrosVigentes.toFixed(2)),
+      totalPrimasNetasVigentes: Number(totalPrimasNetasVigentes.toFixed(2)),
+      totalMontoSiniestrosAcumulados: Number(totalMontoSiniestrosAcumulados.toFixed(2)),
+      totalPrimasNetasAcumuladas: Number(totalPrimasNetasAcumuladas.toFixed(2))
     });
   } catch (error) {
     return NextResponse.json({ error: 'Error al calcular métricas' }, { status: 500 });

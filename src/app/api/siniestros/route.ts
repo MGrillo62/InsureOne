@@ -13,7 +13,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, id, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, motivo, proximo_control } = body;
+    const { action, id, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, motivo, proximo_control, monto_siniestro } = body;
     
     if (action === 'create') {
       if (!id_poliza || !id_cliente || !fecha_evento || !tipo_siniestro) {
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
         fecha_evento,
         tipo_siniestro,
         ajustador: ajustador || 'Por asignar',
-        estado: estado || 'Reportado'
+        estado: estado || 'Reportado',
+        monto_siniestro: Number(monto_siniestro || 0)
       });
       return NextResponse.json({ success: true, claim: newClaim });
     }

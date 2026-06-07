@@ -33,6 +33,7 @@ interface Claim {
     hora: string;
     proximo_control: string;
   }>;
+  monto_siniestro: number;
 }
 
 interface Policy {
@@ -41,6 +42,7 @@ interface Policy {
   ramo: string;
   id_cliente: string;
   compania_aseguradora: string;
+  moneda?: 'USD' | 'PEN';
 }
 
 interface Client {
@@ -75,6 +77,7 @@ export default function SiniestrosPage() {
   const [fechaEvento, setFechaEvento] = useState('');
   const [tipoSiniestro, setTipoSiniestro] = useState('');
   const [ajustador, setAjustador] = useState('');
+  const [montoSiniestro, setMontoSiniestro] = useState('');
 
   // Log Form
   const [logMotivo, setLogMotivo] = useState('');
@@ -136,7 +139,8 @@ export default function SiniestrosPage() {
           id_poliza: idPoliza,
           fecha_evento: fechaEvento,
           tipo_siniestro: tipoSiniestro,
-          ajustador
+          ajustador,
+          monto_siniestro: Number(montoSiniestro || 0)
         })
       });
       if (res.ok) {
@@ -148,6 +152,7 @@ export default function SiniestrosPage() {
         setIdPoliza('');
         setTipoSiniestro('');
         setAjustador('');
+        setMontoSiniestro('');
       }
     } catch (err) {
       console.error(err);
@@ -315,6 +320,7 @@ export default function SiniestrosPage() {
                       </div>
                       <div style={{ display: 'flex', gap: '15px', fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
                         <span>Póliza: {policy?.numero_poliza}</span>
+                        <span>Monto: {policy?.moneda || 'USD'} {claim.monto_siniestro ? claim.monto_siniestro.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                           <Clock size={11} />
                           Hace {days} días
@@ -390,7 +396,7 @@ export default function SiniestrosPage() {
                     </div>
                   </div>
                   
-                  <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '12px', paddingTop: '10px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '15px' }}>
+                  <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '12px', paddingTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '15px' }}>
                     <div>
                       <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>AJUSTADOR ENCARGADO</span>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: '#334155', marginTop: '2px' }}>
@@ -401,6 +407,12 @@ export default function SiniestrosPage() {
                       <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>FECHA DEL EVENTO</span>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: '#334155', marginTop: '2px' }}>
                         {formatDateToLocal(selectedClaim.fecha_evento)}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>MONTO DEL SINIESTRO</span>
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#DC2626', marginTop: '2px' }}>
+                        {policies.find(p => p.id === selectedClaim.id_poliza)?.moneda || 'USD'} {selectedClaim.monto_siniestro ? selectedClaim.monto_siniestro.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
                       </div>
                     </div>
                   </div>
@@ -559,6 +571,19 @@ export default function SiniestrosPage() {
                       onChange={(e) => setAjustador(e.target.value)} 
                     />
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Monto del Siniestro *</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="form-input" 
+                    placeholder="Ej. 1500.00" 
+                    value={montoSiniestro} 
+                    onChange={(e) => setMontoSiniestro(e.target.value)} 
+                    required 
+                  />
                 </div>
               </div>
               <div className="modal-footer">

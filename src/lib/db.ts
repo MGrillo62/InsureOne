@@ -151,6 +151,7 @@ export interface Claim {
     hora: string;
     proximo_control: string;
   }>;
+  monto_siniestro: number;
 }
 
 // Memory State fallback variables for session multi-tenancy
@@ -314,6 +315,8 @@ export async function initializeDatabase() {
         fecha_creacion VARCHAR(10) NOT NULL,
         bitacora JSONB NOT NULL
       );
+      
+      ALTER TABLE siniestros ADD COLUMN IF NOT EXISTS monto_siniestro NUMERIC(12, 2) DEFAULT 0.00;
       
       CREATE TABLE IF NOT EXISTS reclamaciones (
         id VARCHAR(30) PRIMARY KEY,
@@ -940,7 +943,10 @@ export async function getClaims(): Promise<Claim[]> {
   await initializeDatabase();
   const tenantId = await getRequestTenantId();
   const res = await pool.query('SELECT * FROM siniestros WHERE id_tenant = $1 ORDER BY id DESC', [tenantId]);
-  return res.rows;
+  return res.rows.map(row => ({
+    ...row,
+    monto_siniestro: parseFloat(row.monto_siniestro || '0')
+  }));
 }
 
 export async function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha_creacion' | 'bitacora'>): Promise<Claim> {
@@ -966,19 +972,23 @@ export async function createClaim(claim: Omit<Claim, 'id' | 'id_tenant' | 'fecha
   ];
 
   const res = await pool.query(
-    `INSERT INTO siniestros (id, id_tenant, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, fecha_creacion, bitacora) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    `INSERT INTO siniestros (id, id_tenant, id_poliza, id_cliente, fecha_evento, tipo_siniestro, ajustador, estado, fecha_creacion, bitacora, monto_siniestro) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [
       claimId, tenantId, claim.id_poliza, claim.id_cliente, claim.fecha_evento, claim.tipo_siniestro, 
       claim.ajustador || '', claim.estado || 'Reportado', new Date().toISOString().split('T')[0], 
-      JSON.stringify(initialBitacora)
+      JSON.stringify(initialBitacora), claim.monto_siniestro || 0
     ]
   );
 
   // Log in client history
   await addClientHistory(claim.id_cliente, 'Siniestro Declarado', `Se reportó siniestro (${claim.tipo_siniestro}) para póliza ID: ${claim.id_poliza}`);
 
-  return res.rows[0];
+  const row = res.rows[0];
+  return {
+    ...row,
+    monto_siniestro: parseFloat(row.monto_siniestro || '0')
+  };
 }
 
 export async function addClaimLog(claimId: string, motivo: string, proximo_control: string): Promise<Claim> {
@@ -998,7 +1008,11 @@ export async function addClaimLog(claimId: string, motivo: string, proximo_contr
     }
   ];
 
-  return updateTableRecord('siniestros', claimId, { bitacora: bitacoraUpdated });
+  const row = await updateTableRecord('siniestros', claimId, { bitacora: bitacoraUpdated });
+  return {
+    ...row,
+    monto_siniestro: parseFloat(row.monto_siniestro || '0')
+  };
 }
 
 export async function updateClaimStatus(claimId: string, estado: Claim['estado']): Promise<Claim> {
@@ -1018,7 +1032,11 @@ export async function updateClaimStatus(claimId: string, estado: Claim['estado']
     }
   ];
 
-  return updateTableRecord('siniestros', claimId, { estado, bitacora: bitacoraUpdated });
+  const row = await updateTableRecord('siniestros', claimId, { estado, bitacora: bitacoraUpdated });
+  return {
+    ...row,
+    monto_siniestro: parseFloat(row.monto_siniestro || '0')
+  };
 }
 
 export interface Reclamacion {

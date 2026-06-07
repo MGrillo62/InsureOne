@@ -26,6 +26,12 @@ interface DashboardMetrics {
   vencimientosMes: number;
   shareByInsurer: Array<{ name: string; value: number }>;
   shareByRamo: Array<{ name: string; value: number }>;
+  siniestralidadVigente: number;
+  siniestralidadAcumulada: number;
+  totalMontoSiniestrosVigentes: number;
+  totalPrimasNetasVigentes: number;
+  totalMontoSiniestrosAcumulados: number;
+  totalPrimasNetasAcumuladas: number;
 }
 
 interface AlertItem {
@@ -246,6 +252,32 @@ export default function DashboardPage() {
           </div>
           <div className="kpi-icon" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
             <Percent size={18} />
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-details">
+            <h3>Siniestralidad Cartera Vigente</h3>
+            <div className="kpi-value" style={{ color: '#DC2626' }}>{metrics.siniestralidadVigente.toFixed(2)}%</div>
+            <span className="kpi-subtitle" style={{ color: '#64748B' }}>
+              USD {metrics.totalMontoSiniestrosVigentes.toLocaleString('en-US', { minimumFractionDigits: 2 })} Siniestros / USD {metrics.totalPrimasNetasVigentes.toLocaleString('en-US', { minimumFractionDigits: 2 })} Primas
+            </span>
+          </div>
+          <div className="kpi-icon" style={{ backgroundColor: '#FEE2E2', color: '#EF4444' }}>
+            <AlertTriangle size={20} />
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-details">
+            <h3>Siniestralidad Acumulada Cartera</h3>
+            <div className="kpi-value" style={{ color: '#DC2626' }}>{metrics.siniestralidadAcumulada.toFixed(2)}%</div>
+            <span className="kpi-subtitle" style={{ color: '#64748B' }}>
+              USD {metrics.totalMontoSiniestrosAcumulados.toLocaleString('en-US', { minimumFractionDigits: 2 })} Siniestros / USD {metrics.totalPrimasNetasAcumuladas.toLocaleString('en-US', { minimumFractionDigits: 2 })} Primas
+            </span>
+          </div>
+          <div className="kpi-icon" style={{ backgroundColor: '#F3E8FF', color: '#8B5CF6' }}>
+            <AlertTriangle size={20} />
           </div>
         </div>
       </div>
