@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAseguradoras, createAseguradora, updateAseguradora } from '@/lib/db';
+import { getAseguradoras, createAseguradora, updateAseguradora, deleteAseguradora } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -43,8 +43,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, aseguradora: updated });
     }
 
+    if (action === 'delete') {
+      if (!id) {
+        return NextResponse.json({ error: 'ID requerido para eliminar' }, { status: 400 });
+      }
+      await deleteAseguradora(Number(id));
+      return NextResponse.json({ success: true });
+    }
+
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ error: 'Error al procesar aseguradora' }, { status: 500 });
   }
 }
+

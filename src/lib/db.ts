@@ -938,6 +938,13 @@ export async function updateAseguradora(id: number, updatedFields: Partial<Omit<
   return row;
 }
 
+export async function deleteAseguradora(id: number): Promise<void> {
+  await initializeDatabase();
+  const tenantId = await getRequestTenantId();
+  await pool.query('DELETE FROM aseguradoras WHERE id = $1 AND id_tenant = $2', [id, tenantId]);
+}
+
+
 // CRUD - Claims (Siniestros)
 export async function getClaims(): Promise<Claim[]> {
   await initializeDatabase();

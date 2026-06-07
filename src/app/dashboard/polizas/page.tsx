@@ -22,7 +22,8 @@ import {
   Upload,
   CheckCircle,
   XCircle,
-  History
+  History,
+  Trash2
 } from 'lucide-react';
 
 interface Client {
@@ -532,10 +533,18 @@ export default function PolizasPage() {
     setAsegModalOpen(true);
   };
 
-  const handleSubmitAseguradora = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editAseguradoraId || !asegNombre || !asegTelefono || !asegEjecutivo || !asegEmail || !asegDireccion) {
-      alert('Todos los campos son requeridos');
+  const handleNewAseguradora = () => {
+    setEditAseguradoraId(null);
+    setAsegNombre('');
+    setAsegTelefono('');
+    setAsegEjecutivo('');
+    setAsegEmail('');
+    setAsegDireccion('');
+    setAsegModalOpen(true);
+  };
+
+  const handleDeleteAseguradora = async (id: number, name: string) => {
+    if (!confirm(`¿Está seguro que desea eliminar la aseguradora "${name}"?`)) {
       return;
     }
 
@@ -544,8 +553,38 @@ export default function PolizasPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'update',
-          id: editAseguradoraId,
+          action: 'delete',
+          id
+        })
+      });
+
+      if (res.ok) {
+        await fetchAseguradoras();
+      } else {
+        const data = await res.json();
+        alert(`Error al eliminar aseguradora: ${data.error || 'Error desconocido'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al eliminar aseguradora');
+    }
+  };
+
+  const handleSubmitAseguradora = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!asegNombre || !asegTelefono || !asegEjecutivo || !asegEmail || !asegDireccion) {
+      alert('Todos los campos son requeridos');
+      return;
+    }
+
+    try {
+      const isEdit = !!editAseguradoraId;
+      const res = await fetch('/api/aseguradoras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: isEdit ? 'update' : 'create',
+          id: isEdit ? editAseguradoraId : undefined,
           nombre: asegNombre,
           telefono: asegTelefono,
           ejecutivo: asegEjecutivo,
@@ -560,11 +599,11 @@ export default function PolizasPage() {
         setEditAseguradoraId(null);
       } else {
         const data = await res.json();
-        alert(`Error al actualizar aseguradora: ${data.error || 'Error desconocido'}`);
+        alert(`Error al guardar aseguradora: ${data.error || 'Error desconocido'}`);
       }
     } catch (err) {
       console.error(err);
-      alert('Error de red al actualizar aseguradora');
+      alert('Error de red al guardar aseguradora');
     }
   };
 
@@ -777,6 +816,10 @@ export default function PolizasPage() {
       );
     });
 
+    if (activeTab === 'lista') {
+      return list.filter(p => p.estado === 'Vigente');
+    }
+
     if (activeTab === 'renovaciones') {
       const systemDate = new Date('2026-06-05');
       return list.filter(p => {
@@ -920,14 +963,23 @@ export default function PolizasPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary" onClick={() => setUploadModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Upload size={16} />
-            Carga Masiva
-          </button>
-          <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} />
-            Registrar Póliza
-          </button>
+          {activeTab === 'catalogo' ? (
+            <button className="btn btn-primary" onClick={handleNewAseguradora} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} />
+              Adicionar Aseguradora
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => setUploadModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Upload size={16} />
+                Carga Masiva
+              </button>
+              <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Plus size={16} />
+                Registrar Póliza
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1161,11 +1213,25 @@ export default function PolizasPage() {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Building2 size={18} />
+                <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Building2 size={18} />
+                    </div>
+                    <h2 style={{ fontSize: '15px' }}>{a.nombre}</h2>
                   </div>
-                  <h2 style={{ fontSize: '15px' }}>{a.nombre}</h2>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary btn-sm" 
+                    style={{ padding: '6px', minWidth: 'auto', background: 'transparent', border: 'none', color: '#EF4444' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAseguradora(a.id, a.nombre);
+                    }}
+                    title="Eliminar Aseguradora"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
                 <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1614,6 +1680,7 @@ export default function PolizasPage() {
                             <th>Comisión Total</th>
                             <th>Siniestros Liquidados</th>
                             <th>Siniestralidad</th>
+                            <th>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1643,6 +1710,16 @@ export default function PolizasPage() {
                                   <span className="badge" style={{ backgroundColor: termLossRatio > 50 ? '#FEE2E2' : '#F1F5F9', color: termLossRatio > 50 ? '#EF4444' : '#475569', fontWeight: 600 }}>
                                     {termLossRatio.toFixed(2)}%
                                   </span>
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '2px 8px', fontSize: '11px' }}
+                                    onClick={() => handleEditPolicy(term)}
+                                  >
+                                    Ver
+                                  </button>
                                 </td>
                               </tr>
                             );
@@ -1842,7 +1919,7 @@ export default function PolizasPage() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Editar Aseguradora</h3>
+              <h3 className="modal-title">{editAseguradoraId ? 'Editar Aseguradora' : 'Adicionar Aseguradora'}</h3>
               <button className="modal-close-btn" onClick={() => { setAsegModalOpen(false); setEditAseguradoraId(null); }}>&times;</button>
             </div>
             <form onSubmit={handleSubmitAseguradora}>
@@ -1900,7 +1977,9 @@ export default function PolizasPage() {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => { setAsegModalOpen(false); setEditAseguradoraId(null); }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Guardar Cambios</button>
+                <button type="submit" className="btn btn-primary">
+                  {editAseguradoraId ? 'Guardar Cambios' : 'Registrar Aseguradora'}
+                </button>
               </div>
             </form>
           </div>
