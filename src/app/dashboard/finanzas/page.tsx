@@ -23,6 +23,10 @@ interface PaymentSchedule {
   fecha_vencimiento: string;
   estado_pago: 'Pendiente' | 'Pagado' | 'Vencido';
   estado_comision: 'Pendiente' | 'Cobrado';
+  fecha_pago?: string;
+  medio_pago?: string;
+  nro_operacion?: string;
+  banco?: string;
 }
 
 interface Policy {
@@ -77,6 +81,14 @@ export default function FinanzasPage() {
   const [simulationLogs, setSimulationLogs] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Payment Modal States
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [payDate, setPayDate] = useState('');
+  const [payMethod, setPayMethod] = useState('Transferencia Bancaria');
+  const [payBank, setPayBank] = useState('BCP');
+  const [payReference, setPayReference] = useState('');
+
   const fetchData = async () => {
     try {
       const schRes = await fetch('/api/cronograma');
@@ -104,7 +116,14 @@ export default function FinanzasPage() {
   }, []);
 
   // Handle manual update of client payment status
-  const handleUpdatePaymentStatus = async (id: string, status: 'Pendiente' | 'Pagado' | 'Vencido') => {
+  const handleUpdatePaymentStatus = async (
+    id: string, 
+    status: 'Pendiente' | 'Pagado' | 'Vencido',
+    fecha_pago?: string,
+    medio_pago?: string,
+    nro_operacion?: string,
+    banco?: string
+  ) => {
     try {
       const res = await fetch('/api/cronograma', {
         method: 'POST',
@@ -112,11 +131,16 @@ export default function FinanzasPage() {
         body: JSON.stringify({
           action: 'updateStatus',
           id,
-          estado_pago: status
+          estado_pago: status,
+          fecha_pago,
+          medio_pago,
+          nro_operacion,
+          banco
         })
       });
       if (res.ok) {
         fetchData();
+        setShowPayModal(false);
       }
     } catch (err) {
       console.error(err);
@@ -533,22 +557,39 @@ export default function FinanzasPage() {
                         {policy?.moneda === 'PEN' ? 'S/.' : 'USD'} {item.monto_cuota_cliente.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className={`badge ${
-                            item.estado_pago === 'Pagado' ? 'badge-success' :
-                            item.estado_pago === 'Vencido' ? 'badge-danger' : 'badge-info'
-                          }`}>
-                            {(item.estado_pago || 'Pendiente').toUpperCase()}
-                          </span>
-                          
-                          {item.estado_pago !== 'Pagado' && (
-                            <button 
-                              className="btn btn-secondary btn-sm" 
-                              style={{ padding: '2px 6px', fontSize: '10px' }}
-                              onClick={() => handleUpdatePaymentStatus(item.id, 'Pagado')}
-                            >
-                              Pagar
-                            </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className={`badge ${
+                              item.estado_pago === 'Pagado' ? 'badge-success' :
+                              item.estado_pago === 'Vencido' ? 'badge-danger' : 'badge-info'
+                            }`}>
+                              {(item.estado_pago || 'Pendiente').toUpperCase()}
+                            </span>
+                            
+                            {item.estado_pago !== 'Pagado' && (
+                              <button 
+                                className="btn btn-secondary btn-sm" 
+                                style={{ padding: '2px 6px', fontSize: '10px' }}
+                                onClick={() => {
+                                  setSelectedScheduleId(item.id);
+                                  setPayDate(new Date().toISOString().split('T')[0]);
+                                  setPayMethod('Transferencia Bancaria');
+                                  setPayBank('BCP');
+                                  setPayReference('');
+                                  setShowPayModal(true);
+                                }}
+                              >
+                                Pagar
+                              </button>
+                            )}
+                          </div>
+                          {item.estado_pago === 'Pagado' && (
+                            <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', flexDirection: 'column', marginTop: '2px' }}>
+                              <span><strong>Fecha:</strong> {formatDateToLocal(item.fecha_pago || '')}</span>
+                              <span><strong>Medio:</strong> {item.medio_pago || '-'}</span>
+                              {item.banco && <span><strong>Banco:</strong> {item.banco}</span>}
+                              {item.nro_operacion && <span><strong>Op/Ref:</strong> {item.nro_operacion}</span>}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -608,6 +649,82 @@ export default function FinanzasPage() {
         )}
       </div>
 
+      {/* MODAL: REGISTRAR COBRO */}
+      {showPayModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Registrar Cobro de Prima</h3>
+              <button className="modal-close-btn" onClick={() => setShowPayModal(false)}>&times;</button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (selectedScheduleId) {
+                handleUpdatePaymentStatus(selectedScheduleId, 'Pagado', payDate, payMethod, payReference, payBank);
+              }
+            }}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Fecha de Cobro *</label>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={payDate} 
+                    onChange={(e) => setPayDate(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Medio de Pago *</label>
+                  <select 
+                    className="form-input" 
+                    value={payMethod} 
+                    onChange={(e) => setPayMethod(e.target.value)}
+                    required
+                  >
+                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                    <option value="Depósito en Cuenta">Depósito en Cuenta</option>
+                    <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                    <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+                    <option value="Pago Móvil (Yape/Plin)">Pago Móvil (Yape/Plin)</option>
+                    <option value="Efectivo">Efectivo</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Banco Destino</label>
+                  <select 
+                    className="form-input" 
+                    value={payBank} 
+                    onChange={(e) => setPayBank(e.target.value)}
+                  >
+                    <option value="BCP">Banco de Crédito (BCP)</option>
+                    <option value="BBVA">BBVA</option>
+                    <option value="Interbank">Interbank</option>
+                    <option value="Scotiabank">Scotiabank</option>
+                    <option value="Banco de la Nación">Banco de la Nación</option>
+                    <option value="Banbif">Banbif</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nro. Operación / Referencia</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Ej. OP-472918" 
+                    value={payReference} 
+                    onChange={(e) => setPayReference(e.target.value)} 
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Registrar Pago</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

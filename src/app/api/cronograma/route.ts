@@ -13,13 +13,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, id, estado_pago, estado_comision, importData } = body;
+    const { action, id, estado_pago, estado_comision, fecha_pago, medio_pago, nro_operacion, banco, importData } = body;
     
     if (action === 'updateStatus') {
       if (!id) {
         return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
       }
-      const updated = await updatePaymentStatus(id, estado_pago, estado_comision);
+      const updated = await updatePaymentStatus(id, estado_pago, estado_comision, fecha_pago, medio_pago, nro_operacion, banco);
       return NextResponse.json({ success: true, item: updated });
     }
     

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPolicies, createPolicy, updatePolicy } from '@/lib/db';
+import { getPolicies, createPolicy, updatePolicy, regeneratePolicySchedule } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -90,6 +90,9 @@ export async function POST(request: Request) {
         moneda,
         periodicidad
       });
+      if (installments) {
+        await regeneratePolicySchedule(id, Number(installments));
+      }
       return NextResponse.json({ success: true, policy: updated });
     }
     

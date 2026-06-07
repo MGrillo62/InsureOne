@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { 
   getTenants, 
   getActiveTenantId, 
@@ -6,7 +7,8 @@ import {
   createTenant, 
   updateTenant, 
   getTenantPagos, 
-  createTenantPago 
+  createTenantPago,
+  updateCurrentUser
 } from '@/lib/db';
 
 export async function GET() {
@@ -70,6 +72,22 @@ export async function POST(request: Request) {
     }
     
     await setActiveTenantId(tId);
+
+    // Sync session cookie if user is superadmin
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('insureone_session');
+    if (sessionCookie && sessionCookie.value) {
+      const sessionUser = JSON.parse(sessionCookie.value);
+      if (sessionUser.rol === 'Superadmin') {
+        sessionUser.id_tenant = tId;
+        cookieStore.set('insureone_session', JSON.stringify(sessionUser), {
+          path: '/',
+          httpOnly: false,
+          maxAge: 60 * 60 * 24 * 7 // 1 week
+        });
+        await updateCurrentUser(sessionUser);
+      }
+    }
     
     return NextResponse.json({ success: true, activeTenantId: tId });
   } catch (error) {

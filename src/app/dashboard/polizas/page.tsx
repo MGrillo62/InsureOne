@@ -465,6 +465,7 @@ export default function PolizasPage() {
   // Modals & States
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editPolicyId, setEditPolicyId] = useState<string | null>(null);
+  const [schedules, setSchedules] = useState<any[]>([]);
 
   // Dynamic Lists for Autocomplete/Dropdowns
   const [ramosList, setRamosList] = useState<string[]>(['Vehicular', 'EPS', 'SCTR', 'Vida', 'Multirriesgo']);
@@ -625,6 +626,11 @@ export default function PolizasPage() {
         const claimsData = await claimsRes.json();
         setClaims(claimsData);
       }
+      const schRes = await fetch('/api/cronograma');
+      if (schRes.ok) {
+        const schData = await schRes.json();
+        setSchedules(schData);
+      }
       await fetchAseguradoras();
     } catch (err) {
       console.error(err);
@@ -746,6 +752,14 @@ export default function PolizasPage() {
   const handleEditPolicy = (p: Policy) => {
     setEditPolicyId(p.id);
     setIdCliente(p.id_cliente);
+    
+    // Set installments count based on cronograma entries length
+    const policySchedules = schedules.filter(s => s.id_poliza === p.id);
+    if (policySchedules.length > 0) {
+      setInstallments(policySchedules.length);
+    } else {
+      setInstallments(4); // Default fallback
+    }
     
     const clientObj = clients.find(c => c.id === p.id_cliente);
     setClientSearchInput(clientObj ? clientObj.nombre : '');
@@ -1098,11 +1112,21 @@ export default function PolizasPage() {
                         key={p.id}
                         tabIndex={0}
                         style={{ cursor: 'pointer' }}
-                        onClick={() => handleEditPolicy(p)}
+                        onClick={() => {
+                          if (p.estado !== 'Vigente') {
+                            window.open(`/dashboard/polizas/consulta?id=${p.id}`, '_blank');
+                          } else {
+                            handleEditPolicy(p);
+                          }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            handleEditPolicy(p);
+                            if (p.estado !== 'Vigente') {
+                              window.open(`/dashboard/polizas/consulta?id=${p.id}`, '_blank');
+                            } else {
+                              handleEditPolicy(p);
+                            }
                           }
                         }}
                       >
@@ -1143,11 +1167,15 @@ export default function PolizasPage() {
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={(e) => {
                               e.stopPropagation(); // Evitar doble ejecución por el click en tr
-                              handleEditPolicy(p);
+                              if (p.estado !== 'Vigente') {
+                                window.open(`/dashboard/polizas/consulta?id=${p.id}`, '_blank');
+                              } else {
+                                handleEditPolicy(p);
+                              }
                             }}
                           >
                             <Edit2 size={12} />
-                            Editar
+                            {p.estado !== 'Vigente' ? 'Ver' : 'Editar'}
                           </button>
                         </td>
                       </tr>
@@ -1716,7 +1744,9 @@ export default function PolizasPage() {
                                     type="button"
                                     className="btn btn-secondary btn-sm"
                                     style={{ padding: '2px 8px', fontSize: '11px' }}
-                                    onClick={() => handleEditPolicy(term)}
+                                    onClick={() => {
+                                      window.open(`/dashboard/polizas/consulta?id=${term.id}`, '_blank');
+                                    }}
                                   >
                                     Ver
                                   </button>

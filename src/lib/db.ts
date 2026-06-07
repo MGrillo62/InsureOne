@@ -99,6 +99,10 @@ export interface PaymentSchedule {
   fecha_vencimiento: string;
   estado_pago: 'Pendiente' | 'Pagado' | 'Vencido';
   estado_comision: 'Pendiente' | 'Cobrado';
+  fecha_pago?: string;
+  medio_pago?: string;
+  nro_operacion?: string;
+  banco?: string;
 }
 
 export interface Lead {
@@ -302,6 +306,11 @@ export async function initializeDatabase() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS historial JSONB DEFAULT '[]'::jsonb;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS fecha_seguimiento VARCHAR(10);
       ALTER TABLE leads ALTER COLUMN ramo TYPE VARCHAR(250);
+      
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS fecha_pago VARCHAR(10);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS medio_pago VARCHAR(50);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS nro_operacion VARCHAR(50);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS banco VARCHAR(50);
       
       CREATE TABLE IF NOT EXISTS siniestros (
         id VARCHAR(10) PRIMARY KEY,
@@ -827,6 +836,57 @@ export async function updatePolicy(id: string, updatedFields: Partial<Omit<Polic
   };
 }
 
+export async function regeneratePolicySchedule(policyId: string, installments: number): Promise<PaymentSchedule[]> {
+  await initializeDatabase();
+  const tenantId = await getRequestTenantId();
+  const policy = await getPolicyById(policyId);
+  if (!policy) throw new Error('Policy not found');
+
+  // Delete existing cronograma entries
+  await pool.query('DELETE FROM cronograma WHERE id_poliza = $1 AND id_tenant = $2', [policyId, tenantId]);
+
+  const schedule: PaymentSchedule[] = [];
+  const cuotaCliente = Number((policy.prima_total / installments).toFixed(2));
+  const comisionBroker = Number((policy.comision_total / installments).toFixed(2));
+  const startDay = new Date(policy.fecha_inicio);
+
+  const resCronogramas = await pool.query('SELECT count(*) FROM cronograma');
+  let startCronNum = parseInt(resCronogramas.rows[0].count) + 1;
+
+  for (let i = 1; i <= installments; i++) {
+    const dueDate = new Date(startDay);
+    dueDate.setDate(dueDate.getDate() + (i - 1) * 30);
+    
+    const systemDate = new Date('2026-06-05');
+    let estadoPago: 'Pendiente' | 'Pagado' | 'Vencido' = 'Pendiente';
+    if (dueDate < systemDate) {
+      estadoPago = 'Vencido';
+    }
+
+    const payId = `PAY-${String(startCronNum + i - 1).padStart(3, '0')}`;
+
+    const resPay = await pool.query(
+      `INSERT INTO cronograma (id, id_tenant, id_poliza, numero_cuota, monto_cuota_cliente, comision_cuota_broker, fecha_vencimiento, estado_pago, estado_comision) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        payId, tenantId, policyId, i, cuotaCliente, comisionBroker, 
+        dueDate.toISOString().split('T')[0], estadoPago, 'Pendiente'
+      ]
+    );
+
+    schedule.push({
+      ...resPay.rows[0],
+      monto_cuota_cliente: parseFloat(resPay.rows[0].monto_cuota_cliente),
+      comision_cuota_broker: parseFloat(resPay.rows[0].comision_cuota_broker),
+    });
+  }
+
+  // Log in client history
+  await addClientHistory(policy.id_cliente, 'Cuotas Regeneradas', `Se actualizaron las cuotas de la póliza ${policy.numero_poliza} a ${installments} cuotas.`);
+
+  return schedule;
+}
+
 // CRUD - Payment Schedules
 export async function getPaymentSchedules(): Promise<PaymentSchedule[]> {
   await initializeDatabase();
@@ -839,11 +899,23 @@ export async function getPaymentSchedules(): Promise<PaymentSchedule[]> {
   }));
 }
 
-export async function updatePaymentStatus(id: string, estado_pago?: 'Pendiente' | 'Pagado' | 'Vencido', estado_comision?: 'Pendiente' | 'Cobrado'): Promise<PaymentSchedule> {
+export async function updatePaymentStatus(
+  id: string, 
+  estado_pago?: 'Pendiente' | 'Pagado' | 'Vencido', 
+  estado_comision?: 'Pendiente' | 'Cobrado',
+  fecha_pago?: string,
+  medio_pago?: string,
+  nro_operacion?: string,
+  banco?: string
+): Promise<PaymentSchedule> {
   await initializeDatabase();
   const fieldsToUpdate: Record<string, any> = {};
   if (estado_pago !== undefined) fieldsToUpdate.estado_pago = estado_pago;
   if (estado_comision !== undefined) fieldsToUpdate.estado_comision = estado_comision;
+  if (fecha_pago !== undefined) fieldsToUpdate.fecha_pago = fecha_pago;
+  if (medio_pago !== undefined) fieldsToUpdate.medio_pago = medio_pago;
+  if (nro_operacion !== undefined) fieldsToUpdate.nro_operacion = nro_operacion;
+  if (banco !== undefined) fieldsToUpdate.banco = banco;
 
   const row = await updateTableRecord('cronograma', id, fieldsToUpdate);
   return {
