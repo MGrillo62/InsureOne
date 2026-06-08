@@ -201,7 +201,7 @@ export default function LoginPage() {
         {/* STEP 0: LOGIN CARD */}
         {step === 'login' && (
           <div className="login-card animate-fade-in">
-            <h1 className="login-title">InsureONE</h1>
+            <h1 className="login-title">BrokerSync</h1>
             <p className="login-subtitle">Sistema de Control de Pólizas y Cobranzas</p>
             
             {loginError && <div className="error-message">{loginError}</div>}

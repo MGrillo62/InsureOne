@@ -122,7 +122,7 @@ export default function LibroReclamacionesPage() {
             <div className="info-box">
               <h3>Estimado(a) {successData.nombres} {successData.apellidos},</h3>
               <p>Su hoja de reclamación ha sido registrada de forma exitosa en el Libro de Reclamaciones Virtual de <strong>Optimus Systems & Process EIRL</strong>.</p>
-              <p>Se ha guardado una copia en la base de datos de <strong>InsureONE</strong> para su respectiva atención legal.</p>
+              <p>Se ha guardado una copia en la base de datos de <strong>BrokerSync</strong> para su respectiva atención legal.</p>
               <p className="legal-notice">
                 ⚠️ Conforme a la legislación peruana vigente (INDECOPI), daremos respuesta a su solicitud en un plazo máximo e improrrogable de <strong>quince (15) días hábiles</strong>.
               </p>
@@ -300,7 +300,7 @@ export default function LibroReclamacionesPage() {
             </div>
             
             <div className="print-footer">
-              <div className="print-footer-title">INSUREONE</div>
+              <div className="print-footer-title">BROKERSYNC</div>
               <div className="print-footer-address">
                 Calle Españoleto 141 Dpto 102, San Borja, Lima-Perú | Optimus Systems & Process EIRL
               </div>
@@ -472,7 +472,7 @@ export default function LibroReclamacionesPage() {
                       checked={formData.tipoBien === 'SERVICIO'}
                       onChange={() => setFormData({ ...formData, tipoBien: 'SERVICIO' })}
                     />
-                    Servicio (InsureONE SaaS)
+                    Servicio (BrokerSync SaaS)
                   </label>
                 </div>
               </div>
@@ -597,7 +597,7 @@ export default function LibroReclamacionesPage() {
               required
             />
             <label htmlFor="declaroVerdad" className="checkbox-label">
-              <strong>Declaración bajo juramento:</strong> Declaro ser el titular del reclamo respecto al servicio de <strong>InsureONE</strong> y que los datos consignados en la presente hoja de reclamación son verdaderos y de total conformidad con el Código de Protección y Defensa del Consumidor de Perú.
+              <strong>Declaración bajo juramento:</strong> Declaro ser el titular del reclamo respecto al servicio de <strong>BrokerSync</strong> y que los datos consignados en la presente hoja de reclamación son verdaderos y de total conformidad con el Código de Protección y Defensa del Consumidor de Perú.
             </label>
           </div>
 

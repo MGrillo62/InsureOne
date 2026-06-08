@@ -350,7 +350,10 @@ export default function ComisionesPage() {
 
   // Print PDF Trigger
   const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = '';
     window.print();
+    document.title = originalTitle;
   };
 
   const renderSortArrow = (field: keyof PaymentSchedule) => {
@@ -420,9 +423,15 @@ export default function ComisionesPage() {
   return (
     <div className="animate-fade-in">
       
-      {/* CSS print overrides inside component */}
       <style jsx global>{`
         @media print {
+          @page {
+            margin: 0;
+          }
+          body {
+            padding: 1.5cm !important;
+            background: white !important;
+          }
           aside, header, nav, .sidebar-header, .sidebar-menu, .app-topbar, .no-print, .pagination-container, .pagination-actions, .kpi-grid {
             display: none !important;
           }
@@ -804,7 +813,7 @@ export default function ComisionesPage() {
                       </td>
                       <td style={{ fontWeight: 600 }}>{formatDateToLocal(item.fecha_vencimiento)}</td>
                       <td style={{ color: '#475569' }}>
-                        {isPaid && item.fecha_pago ? formatDateToLocal(item.fecha_pago) : '—'}
+                        {item.estado_pago === 'Pagado' ? formatDateToLocal(item.fecha_pago || item.fecha_vencimiento) : '—'}
                       </td>
                       <td style={{ fontWeight: 600, textTransform: 'uppercase' }}>
                         {client?.nombre || 'Desconocido'}
@@ -909,8 +918,8 @@ export default function ComisionesPage() {
 
       {/* PRINT REPORT FOOTER */}
       <div className="print-footer">
-        Este documento es un reporte interno de liquidación de {currentTenant ? currentTenant.nombre : 'su broker'}.<br />
-        SaaS InsureONE | Powered by Optimus SP | https://optimussp.com
+        Este documento es un reporte de liquidación de {currentTenant ? currentTenant.nombre : 'su broker'}.<br />
+        SaaS BrokerSync | Powered by Optimus SP | https://optimussp.com
       </div>
 
       {/* MODAL: REGISTRAR COBRO EN LOTE */}

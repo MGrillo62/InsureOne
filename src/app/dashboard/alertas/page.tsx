@@ -68,7 +68,7 @@ export default function AlertasPage() {
   
   // WhatsApp screen mockup chat list
   const [simulatedMessages, setSimulatedMessages] = useState<Array<{ text: string; time: string; sent: boolean }>>([
-    { text: 'Hola, bienvenido al canal de notificaciones automáticas de InsureONE.', time: '10:00 AM', sent: false }
+    { text: 'Hola, bienvenido al canal de notificaciones automáticas de BrokerSync.', time: '10:00 AM', sent: false }
   ]);
 
   const fetchData = async () => {
@@ -92,8 +92,8 @@ export default function AlertasPage() {
 
   // Templates
   const templates = {
-    pago: 'Estimado(a) {{CLIENT_NAME}},\n\nLe saludamos de InsureONE. Le recordamos que su cuota de la póliza {{POLICY_NUMBER}} vence el {{DUE_DATE}} por un monto de USD {{AMOUNT}}.\n\nEvite la pérdida de cobertura realizando su abono antes de la fecha límite. Si ya realizó el pago, por favor ignore este mensaje.\n\nAtentamente,\nInsureONE Cobranzas',
-    renovacion: 'Estimado(a) {{CLIENT_NAME}},\n\nLe informamos que su póliza de seguro {{POLICY_NUMBER}} (Ramo: {{RAMO}}) está próxima a vencer el {{DUE_DATE}}.\n\nPara iniciar el trámite de renovación comercial y mantener sus beneficios activos con las mejores tarifas del mes, por favor responda a este mensaje.\n\nSaludos cordiales,\nInsureONE Renovaciones'
+    pago: 'Estimado(a) {{CLIENT_NAME}},\n\nLe saludamos de BrokerSync. Le recordamos que su cuota de la póliza {{POLICY_NUMBER}} vence el {{DUE_DATE}} por un monto de USD {{AMOUNT}}.\n\nEvite la pérdida de cobertura realizando su abono antes de la fecha límite. Si ya realizó el pago, por favor ignore este mensaje.\n\nAtentamente,\nBrokerSync Cobranzas',
+    renovacion: 'Estimado(a) {{CLIENT_NAME}},\n\nLe informamos que su póliza de seguro {{POLICY_NUMBER}} (Ramo: {{RAMO}}) está próxima a vencer el {{DUE_DATE}}.\n\nPara iniciar el trámite de renovación comercial y mantener sus beneficios activos con las mejores tarifas del mes, por favor responda a este mensaje.\n\nSaludos cordiales,\nBrokerSync Renovaciones'
   };
 
   // Compile template based on selected customer
@@ -275,7 +275,7 @@ export default function AlertasPage() {
             <div className="card-header" style={{ padding: '12px 20px', background: '#075E54', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#4ADE80' }} />
               <div>
-                <h2 style={{ fontSize: '14px', color: '#FFFFFF' }}>Simulador Móvil: WhatsApp InsureONE</h2>
+                <h2 style={{ fontSize: '14px', color: '#FFFFFF' }}>Simulador Móvil: WhatsApp BrokerSync</h2>
                 <p className="card-subtitle" style={{ color: '#E2E8F0', fontSize: '10.5px' }}>Canal de notificaciones en tiempo real del Tenant</p>
               </div>
             </div>

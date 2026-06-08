@@ -205,8 +205,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <path d="M40 50 L47 57 L63 41" stroke="#00D2C4" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span style={{ display: sidebarCollapsed ? 'none' : 'block', marginLeft: '5px' }}>
-              <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Insure</span>
-              <span style={{ color: '#00D2C4', fontWeight: 500 }}>ONE</span>
+              <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Broker</span>
+              <span style={{ color: '#00D2C4', fontWeight: 500 }}>Sync</span>
             </span>
           </Link>
           <button 

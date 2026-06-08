@@ -183,13 +183,33 @@ export default function FinanzasPage() {
     const headers = [
       'Número de Póliza', 'Número de Cuota', 'Pago Cliente', 'Comisión Broker'
     ];
-    const sampleRow1 = [
-      'CAR-12345-2026', 1, 'Pagado', 'Cobrado'
-    ];
-    const sampleRow2 = [
-      'SCTR-9988-2026', 2, 'Pagado', 'Pendiente'
-    ];
-    const wsData = [headers, sampleRow1, sampleRow2];
+    
+    // Get currently filtered schedules and select those that are pending payment or commission
+    const currentFiltered = getFilteredSchedules();
+    const pendingSchedules = currentFiltered.filter(item => 
+      item.estado_pago !== 'Pagado' || item.estado_comision !== 'Cobrado'
+    );
+
+    let rows: any[][] = [];
+    if (pendingSchedules.length > 0) {
+      rows = pendingSchedules.map(item => {
+        const policy = policies.find(p => p.id === item.id_poliza);
+        return [
+          policy?.numero_poliza || '',
+          item.numero_cuota,
+          item.estado_pago || 'Pendiente',
+          item.estado_comision || 'Pendiente'
+        ];
+      });
+    } else {
+      // Fallback sample rows if no pending records match
+      rows = [
+        ['CAR-12345-2026', 1, 'Pagado', 'Cobrado'],
+        ['SCTR-9988-2026', 2, 'Pagado', 'Pendiente']
+      ];
+    }
+
+    const wsData = [headers, ...rows];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Actualización Cobros');
@@ -594,6 +614,7 @@ export default function FinanzasPage() {
                 <th>Asegurado / Cliente</th>
                 <th>Aseguradora</th>
                 <th>Monto Cuota Cliente</th>
+                <th>Cuota</th>
                 <th>Estado Pago Cliente</th>
                 <th>Comisión Broker</th>
                 <th>Estado Comisión Broker</th>
@@ -602,7 +623,7 @@ export default function FinanzasPage() {
             <tbody>
               {paginatedSchedules.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
                     No se encontraron vencimientos de cuotas.
                   </td>
                 </tr>
@@ -623,6 +644,9 @@ export default function FinanzasPage() {
                       </td>
                       <td style={{ fontFamily: 'var(--font-title)', fontWeight: 600 }}>
                         {policy?.moneda === 'PEN' ? 'S/.' : 'USD'} {item.monto_cuota_cliente.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>
+                        Cuota {item.numero_cuota}
                       </td>
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

@@ -304,7 +304,7 @@ export default function ConfiguracionPage() {
         <div>
           <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
           <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
-            Como Superusuario de InsureOne, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
+            Como Superusuario de BrokerSync, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
           </p>
         </div>
       </div>
@@ -610,7 +610,7 @@ export default function ConfiguracionPage() {
                           alt="Preview Logo" 
                           style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #E2E8F0', padding: '2px' }}
                           onError={(e) => {
-                            (e.target as any).src = 'https://placehold.co/80x80/f1f5f9/64748b?text=InsureOne';
+                            (e.target as any).src = 'https://placehold.co/80x80/f1f5f9/64748b?text=BrokerSync';
                           }}
                         />
                       ) : (
