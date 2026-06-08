@@ -19,7 +19,8 @@ import {
   Shield,
   Eye,
   EyeOff,
-  UserPlus
+  UserPlus,
+  Coins
 } from 'lucide-react';
 
 interface Tenant {
@@ -180,6 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'CRM', path: '/dashboard/clientes', icon: Users },
     { name: 'Pólizas', path: '/dashboard/polizas', icon: FileText },
     { name: 'Finanzas y Cobranzas', path: '/dashboard/finanzas', icon: DollarSign },
+    { name: 'Comisiones', path: '/dashboard/comisiones', icon: Coins },
     { name: 'Seguimiento Siniestros', path: '/dashboard/siniestros', icon: AlertTriangle },
     { name: 'Alertas Omnicanal', path: '/dashboard/alertas', icon: Bell },
     { name: 'Configuración', path: '/dashboard/configuracion', icon: Shield }

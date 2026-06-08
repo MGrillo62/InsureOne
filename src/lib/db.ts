@@ -103,6 +103,9 @@ export interface PaymentSchedule {
   medio_pago?: string;
   nro_operacion?: string;
   banco?: string;
+  fecha_pago_comision?: string;
+  nro_operacion_comision?: string;
+  banco_comision?: string;
 }
 
 export interface Lead {
@@ -311,6 +314,9 @@ export async function initializeDatabase() {
       ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS medio_pago VARCHAR(50);
       ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS nro_operacion VARCHAR(50);
       ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS banco VARCHAR(50);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS fecha_pago_comision VARCHAR(10);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS nro_operacion_comision VARCHAR(50);
+      ALTER TABLE cronograma ADD COLUMN IF NOT EXISTS banco_comision VARCHAR(50);
       
       CREATE TABLE IF NOT EXISTS siniestros (
         id VARCHAR(10) PRIMARY KEY,
@@ -906,7 +912,10 @@ export async function updatePaymentStatus(
   fecha_pago?: string,
   medio_pago?: string,
   nro_operacion?: string,
-  banco?: string
+  banco?: string,
+  fecha_pago_comision?: string,
+  nro_operacion_comision?: string,
+  banco_comision?: string
 ): Promise<PaymentSchedule> {
   await initializeDatabase();
   const fieldsToUpdate: Record<string, any> = {};
@@ -916,6 +925,9 @@ export async function updatePaymentStatus(
   if (medio_pago !== undefined) fieldsToUpdate.medio_pago = medio_pago;
   if (nro_operacion !== undefined) fieldsToUpdate.nro_operacion = nro_operacion;
   if (banco !== undefined) fieldsToUpdate.banco = banco;
+  if (fecha_pago_comision !== undefined) fieldsToUpdate.fecha_pago_comision = fecha_pago_comision;
+  if (nro_operacion_comision !== undefined) fieldsToUpdate.nro_operacion_comision = nro_operacion_comision;
+  if (banco_comision !== undefined) fieldsToUpdate.banco_comision = banco_comision;
 
   const row = await updateTableRecord('cronograma', id, fieldsToUpdate);
   return {

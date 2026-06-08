@@ -85,9 +85,19 @@ export default function FinanzasPage() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [payDate, setPayDate] = useState('');
-  const [payMethod, setPayMethod] = useState('Transferencia Bancaria');
+  const [payMethod, setPayMethod] = useState('Transferencia');
   const [payBank, setPayBank] = useState('BCP');
   const [payReference, setPayReference] = useState('');
+  const [bankOptions, setBankOptions] = useState([
+    { value: 'BCP', label: 'Banco de Crédito (BCP)' },
+    { value: 'BBVA', label: 'BBVA' },
+    { value: 'Interbank', label: 'Interbank' },
+    { value: 'Scotiabank', label: 'Scotiabank' },
+    { value: 'Banco de la Nación', label: 'Banco de la Nación' },
+    { value: 'Banbif', label: 'Banbif' }
+  ]);
+  const [showAddBank, setShowAddBank] = useState(false);
+  const [newBankName, setNewBankName] = useState('');
 
   const fetchData = async () => {
     try {
@@ -573,8 +583,8 @@ export default function FinanzasPage() {
                                 onClick={() => {
                                   setSelectedScheduleId(item.id);
                                   setPayDate(new Date().toISOString().split('T')[0]);
-                                  setPayMethod('Transferencia Bancaria');
-                                  setPayBank('BCP');
+                                  setPayMethod('Transferencia');
+                                  setPayBank(bankOptions[0]?.value || 'BCP');
                                   setPayReference('');
                                   setShowPayModal(true);
                                 }}
@@ -660,7 +670,14 @@ export default function FinanzasPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               if (selectedScheduleId) {
-                handleUpdatePaymentStatus(selectedScheduleId, 'Pagado', payDate, payMethod, payReference, payBank);
+                handleUpdatePaymentStatus(
+                  selectedScheduleId, 
+                  'Pagado', 
+                  payDate, 
+                  payMethod, 
+                  payMethod === 'Efectivo' ? '' : payReference, 
+                  payMethod === 'Efectivo' ? '' : payBank
+                );
               }
             }}>
               <div className="modal-body">
@@ -679,43 +696,110 @@ export default function FinanzasPage() {
                   <select 
                     className="form-input" 
                     value={payMethod} 
-                    onChange={(e) => setPayMethod(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPayMethod(val);
+                      if (val === 'Efectivo') {
+                        setPayBank('');
+                        setPayReference('');
+                      } else if (!payBank) {
+                        setPayBank(bankOptions[0]?.value || 'BCP');
+                      }
+                    }}
                     required
                   >
-                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                    <option value="Depósito en Cuenta">Depósito en Cuenta</option>
+                    <option value="Transferencia">Transferencia</option>
                     <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
                     <option value="Tarjeta de Débito">Tarjeta de Débito</option>
-                    <option value="Pago Móvil (Yape/Plin)">Pago Móvil (Yape/Plin)</option>
+                    <option value="Yape">Yape</option>
+                    <option value="Plin">Plin</option>
+                    <option value="Sip">Sip</option>
                     <option value="Efectivo">Efectivo</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Banco Destino</label>
-                  <select 
-                    className="form-input" 
-                    value={payBank} 
-                    onChange={(e) => setPayBank(e.target.value)}
-                  >
-                    <option value="BCP">Banco de Crédito (BCP)</option>
-                    <option value="BBVA">BBVA</option>
-                    <option value="Interbank">Interbank</option>
-                    <option value="Scotiabank">Scotiabank</option>
-                    <option value="Banco de la Nación">Banco de la Nación</option>
-                    <option value="Banbif">Banbif</option>
-                    <option value="Otro">Otro</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Nro. Operación / Referencia</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="Ej. OP-472918" 
-                    value={payReference} 
-                    onChange={(e) => setPayReference(e.target.value)} 
-                  />
-                </div>
+                
+                {payMethod !== 'Efectivo' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Banco Destino *</label>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <select 
+                          className="form-input" 
+                          value={payBank} 
+                          onChange={(e) => setPayBank(e.target.value)}
+                          required
+                          style={{ flex: 1 }}
+                        >
+                          {bankOptions.map(b => (
+                            <option key={b.value} value={b.value}>{b.label}</option>
+                          ))}
+                        </select>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary" 
+                          style={{ padding: '8px 12px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onClick={() => setShowAddBank(true)}
+                          title="Agregar banco"
+                        >
+                          +
+                        </button>
+                      </div>
+                      
+                      {showAddBank && (
+                        <div style={{ marginTop: '8px', padding: '10px', background: '#F1F5F9', borderRadius: '6px', border: '1px solid #E2E8F0', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input 
+                            type="text" 
+                            placeholder="Nombre del nuevo banco" 
+                            className="form-input"
+                            style={{ flex: 1, padding: '4px 8px', fontSize: '12.5px' }}
+                            value={newBankName}
+                            onChange={(e) => setNewBankName(e.target.value)}
+                          />
+                          <button 
+                            type="button" 
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '4px 8px', fontSize: '11px' }}
+                            onClick={() => {
+                              if (newBankName.trim()) {
+                                const val = newBankName.trim();
+                                if (!bankOptions.some(b => b.value.toLowerCase() === val.toLowerCase())) {
+                                  setBankOptions([...bankOptions, { value: val, label: val }]);
+                                }
+                                setPayBank(val);
+                                setNewBankName('');
+                                setShowAddBank(false);
+                              }
+                            }}
+                          >
+                            Agregar
+                          </button>
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '4px 8px', fontSize: '11px' }}
+                            onClick={() => {
+                              setShowAddBank(false);
+                              setNewBankName('');
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Nro. Operación / Referencia *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ej. OP-472918" 
+                        value={payReference} 
+                        onChange={(e) => setPayReference(e.target.value)} 
+                        required
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>

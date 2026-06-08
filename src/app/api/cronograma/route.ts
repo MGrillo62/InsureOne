@@ -13,13 +13,24 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, id, estado_pago, estado_comision, fecha_pago, medio_pago, nro_operacion, banco, importData } = body;
+    const { action, id, estado_pago, estado_comision, fecha_pago, medio_pago, nro_operacion, banco, fecha_pago_comision, nro_operacion_comision, banco_comision, importData } = body;
     
     if (action === 'updateStatus') {
       if (!id) {
         return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
       }
-      const updated = await updatePaymentStatus(id, estado_pago, estado_comision, fecha_pago, medio_pago, nro_operacion, banco);
+      const updated = await updatePaymentStatus(
+        id, 
+        estado_pago, 
+        estado_comision, 
+        fecha_pago, 
+        medio_pago, 
+        nro_operacion, 
+        banco,
+        fecha_pago_comision,
+        nro_operacion_comision,
+        banco_comision
+      );
       return NextResponse.json({ success: true, item: updated });
     }
     
