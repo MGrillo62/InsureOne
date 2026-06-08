@@ -11,8 +11,10 @@ import {
   FileSpreadsheet,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  FileText
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface PaymentSchedule {
   id: string;
@@ -73,13 +75,13 @@ export default function FinanzasPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // Simulator stats
-  const [showSimulator, setShowSimulator] = useState(false);
-  const [simulatedCSVText, setSimulatedCSVText] = useState(
-    `policy_number,cuota_number,client_paid,commission_cobrada\nV-908754-2026,1,Pagado,Cobrado\nE-334455-2026,2,Pagado,Cobrado`
-  );
-  const [simulationLogs, setSimulationLogs] = useState<string[]>([]);
-  const [successMessage, setSuccessMessage] = useState('');
+  // Excel upload/download states
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [filePreviewData, setFilePreviewData] = useState<any[]>([]);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<{ updatedClient: number; updatedBroker: number; logs: string[] } | null>(null);
 
   // Payment Modal States
   const [showPayModal, setShowPayModal] = useState(false);
@@ -177,22 +179,112 @@ export default function FinanzasPage() {
     }
   };
 
-  // Run the mock CSV Excel import reconciliation
-  const handleRunReconciliation = async (customCSV?: string) => {
-    const csvContent = customCSV || simulatedCSVText;
-    const lines = csvContent.trim().split('\n');
-    const headers = lines[0].split(',');
-    
-    const importData = [];
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i]) continue;
-      const values = lines[i].split(',');
-      const row: Record<string, string> = {};
-      headers.forEach((h, index) => {
-        row[h.trim()] = values[index]?.trim();
-      });
-      importData.push(row);
-    }
+  const downloadExcelTemplate = () => {
+    const headers = [
+      'Número de Póliza', 'Número de Cuota', 'Pago Cliente', 'Comisión Broker'
+    ];
+    const sampleRow1 = [
+      'CAR-12345-2026', 1, 'Pagado', 'Cobrado'
+    ];
+    const sampleRow2 = [
+      'SCTR-9988-2026', 2, 'Pagado', 'Pendiente'
+    ];
+    const wsData = [headers, sampleRow1, sampleRow2];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Actualización Cobros');
+    XLSX.writeFile(wb, 'plantilla_actualizacion_cobros.xlsx');
+  };
+
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFilePreviewData([]);
+    setUploadErrors([]);
+    setUploadProgress(0);
+    setUploadResults(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+        if (rows.length <= 1) {
+          setUploadErrors(['El archivo no contiene filas de datos para procesar.']);
+          return;
+        }
+
+        const previewList: any[] = [];
+        const errorsList: string[] = [];
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0 || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
+            continue;
+          }
+
+          const lineNum = i + 1;
+
+          const valAt = (idx: number) => {
+            const val = row[idx];
+            return val !== undefined && val !== null ? String(val).trim() : '';
+          };
+
+          const rawNumAt = (idx: number) => {
+            const val = row[idx];
+            return typeof val === 'number' ? val : Number(val);
+          };
+
+          const policyNumber = valAt(0);
+          const cuotaNumber = rawNumAt(1);
+          const clientPaid = valAt(2);
+          const commissionCobrada = valAt(3);
+
+          if (!policyNumber) errorsList.push(`Fila ${lineNum}: El número de póliza es requerido.`);
+          if (isNaN(cuotaNumber) || cuotaNumber <= 0) errorsList.push(`Fila ${lineNum}: El número de cuota debe ser un número positivo.`);
+          if (!clientPaid || !['Pagado', 'Pendiente', 'Vencido'].includes(clientPaid)) {
+            errorsList.push(`Fila ${lineNum}: El estado Pago Cliente debe ser 'Pagado', 'Pendiente' o 'Vencido'.`);
+          }
+          if (!commissionCobrada || !['Cobrado', 'Pendiente'].includes(commissionCobrada)) {
+            errorsList.push(`Fila ${lineNum}: El estado Comisión Broker debe ser 'Cobrado' o 'Pendiente'.`);
+          }
+
+          const policyExists = policies.some(p => p.numero_poliza === policyNumber);
+          
+          previewList.push({
+            linea: lineNum,
+            policy_number: policyNumber,
+            cuota_number: cuotaNumber,
+            client_paid: clientPaid,
+            commission_cobrada: commissionCobrada,
+            policyExists
+          });
+          
+          if (policyNumber && !policyExists) {
+            errorsList.push(`Fila ${lineNum}: La póliza con número ${policyNumber} no existe en el sistema.`);
+          }
+        }
+
+        setUploadErrors(errorsList);
+        setFilePreviewData(previewList);
+      } catch (err) {
+        console.error(err);
+        setUploadErrors(['Error al leer el archivo Excel. Asegúrese de que el formato sea válido.']);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const processBulkUpload = async () => {
+    if (filePreviewData.length === 0 || uploadErrors.length > 0) return;
+
+    setUploading(true);
+    setUploadProgress(10);
 
     try {
       const res = await fetch('/api/cronograma', {
@@ -200,30 +292,45 @@ export default function FinanzasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'importExcel',
-          importData
+          importData: filePreviewData.map(item => ({
+            policy_number: item.policy_number,
+            cuota_number: item.cuota_number,
+            client_paid: item.client_paid,
+            commission_cobrada: item.commission_cobrada === 'Cobrado' ? 'Cobrado' : 'Pendiente'
+          }))
         })
       });
+
+      setUploadProgress(50);
+
       if (res.ok) {
         const data = await res.json();
-        setSimulationLogs(data.logs);
-        setSuccessMessage(`Conciliación completada: Clientes actualizados: ${data.updatedCount.client}, Comisiones: ${data.updatedCount.broker}`);
-        fetchData();
+        setUploadProgress(100);
+        setUploadResults({
+          updatedClient: data.updatedCount.client,
+          updatedBroker: data.updatedCount.broker,
+          logs: data.logs
+        });
+        await fetchData();
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Error al procesar el archivo Excel.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Error al procesar la actualización: ${err.message || 'Error desconocido'}`);
+    } finally {
+      setUploading(false);
     }
   };
 
-  // Quick preset simulation buttons
-  const triggerRimacPreset = () => {
-    const targetPolicy = policies.find(p => p.compania_aseguradora.toLowerCase() === 'rimac');
-    if (targetPolicy) {
-      const csv = `policy_number,cuota_number,client_paid,commission_cobrada\n${targetPolicy.numero_poliza},1,Pagado,Cobrado`;
-      setSimulatedCSVText(csv);
-      handleRunReconciliation(csv);
-    } else {
-      handleRunReconciliation();
-    }
+  const handleCloseUploadModal = () => {
+    setUploadModalOpen(false);
+    setFilePreviewData([]);
+    setUploadErrors([]);
+    setUploadProgress(0);
+    setUploading(false);
+    setUploadResults(null);
   };
 
   // Sorting helper
@@ -316,7 +423,7 @@ export default function FinanzasPage() {
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <DollarSign size={24} style={{ color: '#2563EB' }} />
-            Control de Finanzas y Comisiones
+            Control de Cobranzas y Comisiones
           </h1>
           <p style={{ color: '#64748B', fontSize: '14px', marginTop: '4px' }}>
             Audita el cronograma de cobranzas de clientes y concilia las liquidaciones de comisiones de aseguradoras.
@@ -325,11 +432,11 @@ export default function FinanzasPage() {
         
         <button 
           className="btn btn-secondary" 
-          onClick={() => { setShowSimulator(!showSimulator); setSimulationLogs([]); setSuccessMessage(''); }}
+          onClick={() => setUploadModalOpen(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
         >
           <Upload size={16} />
-          {showSimulator ? 'Ocultar Simulador Excel' : 'Reconciliar con Excel'}
+          Actualizar cobros
         </button>
       </div>
 
@@ -379,55 +486,6 @@ export default function FinanzasPage() {
           </div>
         </div>
       </div>
-
-      {/* EXCEL IMPORT SIMULATOR MODULE */}
-      {showSimulator && (
-        <div className="premium-card animate-slide-in" style={{ borderColor: 'var(--color-primary)' }}>
-          <div className="card-header" style={{ background: 'var(--color-primary-light)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <FileSpreadsheet size={20} style={{ color: 'var(--color-primary)' }} />
-              <div>
-                <h2 style={{ fontSize: '15.5px' }}>Simulador de Carga de Liquidaciones Excel</h2>
-                <p className="card-subtitle">Actualiza automáticamente el estado de cobranza y comisiones subiendo liquidaciones.</p>
-              </div>
-            </div>
-          </div>
-          <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div>
-              <span className="form-label" style={{ fontSize: '12.5px' }}>Contenido de Liquidación (CSV simulado)</span>
-              <textarea 
-                className="form-input"
-                style={{ height: '110px', fontFamily: 'monospace', fontSize: '12px', resize: 'none', marginBottom: '10px' }}
-                value={simulatedCSVText}
-                onChange={(e) => setSimulatedCSVText(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-primary btn-sm" onClick={() => handleRunReconciliation()}>
-                  Ejecutar Reconciliación
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={triggerRimacPreset}>
-                  Cargar Liquidación de Rimac (Automatizado)
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span className="form-label" style={{ fontSize: '12.5px' }}>Consola de Conciliación</span>
-              
-              <div style={{ flex: 1, minHeight: '110px', background: '#0F172A', color: '#38BDF8', borderRadius: '8px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '11.5px', overflowY: 'auto' }}>
-                {successMessage && <div style={{ color: '#4ADE80', fontWeight: 'bold', marginBottom: '6px' }}>[SUCCESS] {successMessage}</div>}
-                {simulationLogs.length === 0 ? (
-                  <div style={{ color: '#64748B' }}>Consola inactiva. Carga o simula una liquidación para ver la auditoría de registros conciliados.</div>
-                ) : (
-                  simulationLogs.map((log, index) => (
-                    <div key={index} style={{ marginBottom: '2px' }}>&gt; {log}</div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ADVANCED FILTERS BAR */}
       <div className="premium-card" style={{ padding: '20px', marginBottom: '25px' }}>
@@ -607,23 +665,11 @@ export default function FinanzasPage() {
                         {policy?.moneda === 'PEN' ? 'S/.' : 'USD'} {item.comision_cuota_broker.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className={`badge ${
-                            item.estado_comision === 'Cobrado' ? 'badge-success' : 'badge-warning'
-                          }`}>
-                            {item.estado_comision === 'Cobrado' ? 'COBRADO' : 'PENDIENTE'}
-                          </span>
-                          
-                          {item.estado_comision !== 'Cobrado' && (
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 6px', fontSize: '10px' }}
-                              onClick={() => handleUpdateCommissionStatus(item.id, 'Cobrado')}
-                            >
-                              Conciliar
-                            </button>
-                          )}
-                        </div>
+                        <span className={`badge ${
+                          item.estado_comision === 'Cobrado' ? 'badge-success' : 'badge-warning'
+                        }`}>
+                          {item.estado_comision === 'Cobrado' ? 'COBRADO' : 'PENDIENTE'}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -806,6 +852,182 @@ export default function FinanzasPage() {
                 <button type="submit" className="btn btn-primary">Registrar Pago</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CARGA MASIVA / ACTUALIZACIÓN DE COBROS */}
+      {uploadModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content large" style={{ maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Upload size={20} style={{ color: '#2563EB' }} />
+                Actualizar cobros masivamente
+              </h3>
+              <button className="modal-close-btn" onClick={handleCloseUploadModal} disabled={uploading}>&times;</button>
+            </div>
+            
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '24px' }}>
+              <p style={{ color: '#64748B', fontSize: '14px', marginBottom: '16px' }}>
+                Actualiza el estado de cobro de clientes y liquidaciones de comisiones cargando una plantilla Excel.
+              </p>
+
+              {/* Template Download Option */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '12px 16px', borderRadius: '8px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
+                <div>
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155' }}>¿No tienes el formato de Excel?</span>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Descarga la plantilla con la estructura correcta.</span>
+                </div>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={downloadExcelTemplate}
+                  disabled={uploading}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <FileText size={14} />
+                  Descargar Formato Excel
+                </button>
+              </div>
+
+              {/* File Upload Zone */}
+              {!uploadResults && (
+                <div style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '30px', textAlign: 'center', backgroundColor: '#F8FAFC', marginBottom: '20px', cursor: 'pointer', transition: 'border-color 0.2s', position: 'relative' }}>
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    onChange={handleExcelFileUpload}
+                    disabled={uploading}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+                  />
+                  <Upload size={36} style={{ color: '#94A3B8', marginBottom: '10px' }} />
+                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#475569' }}>
+                    Selecciona o arrastra tu archivo Excel
+                  </span>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+                    Formatos soportados: .xlsx, .xls
+                  </span>
+                </div>
+              )}
+
+              {/* Progress Indicator */}
+              {uploading && (
+                <div style={{ marginBottom: '20px', background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>
+                    <span>Procesando registros en base de datos...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '10px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div style={{ width: `${uploadProgress}%`, height: '100%', backgroundColor: '#2563EB', transition: 'width 0.2s ease-in-out', borderRadius: '999px' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Success Results */}
+              {uploadResults && (
+                <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '12px', padding: '24px', textAlign: 'center', marginBottom: '20px', color: '#065F46' }}>
+                  <CheckCircle size={40} style={{ color: '#10B981', margin: '0 auto 12px' }} />
+                  <h4 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>¡Actualización Completada!</h4>
+                  <p style={{ fontSize: '14px', marginBottom: '15px', lineHeight: 1.5 }}>
+                    Se actualizaron exitosamente <strong>{uploadResults.updatedClient}</strong> cobros de clientes y <strong>{uploadResults.updatedBroker}</strong> liquidaciones de comisiones.
+                  </p>
+                  
+                  {/* Console logs output */}
+                  <div style={{ textAlign: 'left', background: '#0F172A', color: '#38BDF8', borderRadius: '8px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '11px', maxHeight: '150px', overflowY: 'auto' }}>
+                    {uploadResults.logs.map((log, idx) => (
+                      <div key={idx} style={{ marginBottom: '2px' }}>&gt; {log}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Errors */}
+              {uploadErrors.length > 0 && (
+                <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '16px', marginBottom: '20px', color: '#991B1B' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '14px', marginBottom: '8px' }}>
+                    <XCircle size={16} />
+                    Se detectaron errores en el archivo Excel:
+                  </div>
+                  <ul style={{ fontSize: '13px', paddingLeft: '20px', margin: 0, maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {uploadErrors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#B91C1C', marginTop: '10px', fontWeight: 600 }}>
+                    Por favor, corrija los errores descritos arriba y vuelva a cargar el archivo.
+                  </span>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              {filePreviewData.length > 0 && uploadErrors.length === 0 && !uploadResults && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ fontSize: '13.5px', fontWeight: 600, color: '#1E293B', marginBottom: '10px' }}>Previsualización de Registros Detectados ({filePreviewData.length})</h4>
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                    <table className="premium-table" style={{ fontSize: '12px', margin: 0 }}>
+                      <thead>
+                        <tr style={{ position: 'sticky', top: 0, backgroundColor: '#FFFFFF', zIndex: 1 }}>
+                          <th>Fila</th>
+                          <th>Nro Póliza</th>
+                          <th>Cuota</th>
+                          <th>Pago Cliente</th>
+                          <th>Comisión Broker</th>
+                          <th>Póliza Existe</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filePreviewData.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>{item.linea}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{item.policy_number}</td>
+                            <td>Cuota {item.cuota_number}</td>
+                            <td>
+                              <span className={`badge ${item.client_paid === 'Pagado' ? 'badge-success' : 'badge-secondary'}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                                {item.client_paid.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge ${item.commission_cobrada === 'Cobrado' ? 'badge-success' : 'badge-secondary'}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                                {item.commission_cobrada.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              {item.policyExists ? (
+                                <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 6px' }}>Sí</span>
+                              ) : (
+                                <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px' }}>No Existe</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ flexShrink: 0 }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleCloseUploadModal} 
+                disabled={uploading}
+              >
+                {uploadResults ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!uploadResults && (
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={processBulkUpload}
+                  disabled={uploading || filePreviewData.length === 0 || uploadErrors.length > 0}
+                >
+                  {uploading ? `Procesando...` : 'Actualizar Cobros'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

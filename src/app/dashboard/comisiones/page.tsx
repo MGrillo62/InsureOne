@@ -62,7 +62,12 @@ export default function ComisionesPage() {
   };
 
   const formatCurrency = (val: number, cur?: 'USD' | 'PEN' | string) => {
-    const symbol = cur === 'PEN' ? 'S/.' : 'USD';
+    const symbol = cur === 'PEN' ? 'S/' : '$';
+    return `${symbol} ${val.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
+
+  const formatCurrencyValue = (val: number, cur: 'PEN' | 'USD') => {
+    const symbol = cur === 'PEN' ? 'S/' : '$';
     return `${symbol} ${val.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
@@ -368,6 +373,50 @@ export default function ComisionesPage() {
   const selectedItemsList = filtered.filter(item => selectedIds.has(item.id));
   const selectedCommissionsTotal = selectedItemsList.reduce((sum, s) => sum + s.comision_cuota_broker, 0);
 
+  // Generate Report metadata for mockup header
+  const emissionDateStr = (() => {
+    const monthsEs = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const today = new Date();
+    return `${today.getDate()} ${monthsEs[today.getMonth()]} ${today.getFullYear()}`;
+  })();
+
+  const reportId = (() => {
+    const year = new Date().getFullYear();
+    const countPart = String(filtered.length).padStart(4, '0');
+    return `COM-${year}-${countPart}`;
+  })();
+
+  const periodFromStr = dateFrom ? formatDateToLocal(dateFrom) : (filtered.length > 0 ? formatDateToLocal([...filtered].sort((a,b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))[0].fecha_vencimiento) : '01/09/2024');
+  const periodToStr = dateTo ? formatDateToLocal(dateTo) : (filtered.length > 0 ? formatDateToLocal([...filtered].sort((a,b) => b.fecha_vencimiento.localeCompare(a.fecha_vencimiento))[0].fecha_vencimiento) : '30/09/2024');
+  const periodStr = `${periodFromStr} / ${periodToStr}`;
+
+  const insurerNameStr = (() => {
+    if (insurerFilter) {
+      return insurerFilter.toUpperCase();
+    }
+    if (filtered.length > 0) {
+      const p = policies.find(pol => pol.id === filtered[0].id_poliza);
+      if (p) return p.compania_aseguradora.toUpperCase();
+    }
+    return 'MAPFRE SEGUROS GENERALES';
+  })();
+
+  // PEN Totals calculation
+  const penSchedules = filtered.filter(item => {
+    const policy = policies.find(p => p.id === item.id_poliza);
+    return policy?.moneda === 'PEN';
+  });
+  const penPrimaTotal = penSchedules.reduce((sum, item) => sum + item.monto_cuota_cliente, 0);
+  const penComisionTotal = penSchedules.reduce((sum, item) => sum + item.comision_cuota_broker, 0);
+
+  // USD Totals calculation
+  const usdSchedules = filtered.filter(item => {
+    const policy = policies.find(p => p.id === item.id_poliza);
+    return policy?.moneda !== 'PEN';
+  });
+  const usdPrimaTotal = usdSchedules.reduce((sum, item) => sum + item.monto_cuota_cliente, 0);
+  const usdComisionTotal = usdSchedules.reduce((sum, item) => sum + item.comision_cuota_broker, 0);
+
   return (
     <div className="animate-fade-in">
       
@@ -440,19 +489,7 @@ export default function ComisionesPage() {
         }
       `}</style>
 
-      {/* PRINT REPORT HEADER */}
-      <div className="print-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>{currentTenant ? currentTenant.nombre : 'Broker'} - Reporte de Comisiones por Cobrar</h1>
-            <p>RUC: {currentTenant ? currentTenant.ruc : '---'} | Lista consolidada de comisiones pendientes de liquidación por parte de las aseguradoras.</p>
-          </div>
-          <div style={{ textAlign: 'right', fontSize: '12px', color: '#334155' }}>
-            <strong>Fecha de Generación:</strong> {new Date().toLocaleDateString('es-PE')}<br />
-            <strong>Total Registros:</strong> {selectedIds.size > 0 ? selectedIds.size : filtered.length}
-          </div>
-        </div>
-      </div>
+
 
       {/* Screen Title Bar */}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
@@ -688,37 +725,61 @@ export default function ComisionesPage() {
       )}
 
       {/* MAIN DATA TABLE */}
-      <div className="premium-card">
+      <div className="premium-card" style={{ padding: '24px' }}>
+        
+        {/* MOCKUP REPORT HEADER */}
+        <div style={{ marginBottom: '24px', borderBottom: '2px solid #E2E8F0', paddingBottom: '20px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
+            BROKER
+          </span>
+          <h2 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', marginBottom: '18px', fontFamily: 'var(--font-title)' }}>
+            {currentTenant ? currentTenant.nombre : 'INSTITUCIONAL S.A.'}
+          </h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px 24px', fontSize: '13px', color: '#334155' }}>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>ID Reporte:</span> <span style={{ color: '#0F172A', fontWeight: 600 }}>{reportId}</span>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>Fecha Emisión:</span> <span style={{ color: '#0F172A', fontWeight: 600 }}>{emissionDateStr}</span>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>Periodo:</span> <span style={{ color: '#0F172A', fontWeight: 600 }}>{periodStr}</span>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>Aseguradora:</span> <span style={{ color: '#0F172A', fontWeight: 600 }}>{insurerNameStr}</span>
+            </div>
+          </div>
+        </div>
+
         <div className="table-responsive">
           <table className="premium-table">
             <thead>
-              <tr>
-                <th className="no-print" style={{ width: '40px', textAlign: 'center' }}>
+              <tr style={{ backgroundColor: '#0F172A' }}>
+                <th className="no-print" style={{ width: '40px', textAlign: 'center', backgroundColor: '#0F172A' }}>
                   <input 
                     type="checkbox" 
                     checked={isAllSelected} 
                     onChange={handleSelectAll} 
                   />
                 </th>
-                <th className="sortable" onClick={() => handleSort('fecha_vencimiento')}>
-                  Fecha Vencimiento {renderSortArrow('fecha_vencimiento')}
+                <th className="sortable" onClick={() => handleSort('fecha_vencimiento')} style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>
+                  F. Vencimiento {renderSortArrow('fecha_vencimiento')}
                 </th>
-                <th>Aseguradora</th>
-                <th>Asegurado</th>
-                <th>Ramo</th>
-                <th>Póliza</th>
-                <th>Cuota</th>
-                <th>Prima Cliente</th>
-                <th>Comisión Broker</th>
-                <th>Estado Prima</th>
-                <th>Estado Comisión</th>
-                <th>Detalles Depósito</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>F. Pago</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Asegurado</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Ramo</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Póliza</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Cta</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Prima Cliente</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Comisión Broker</th>
+                <th style={{ color: '#FFFFFF', backgroundColor: '#0F172A' }}>Estado Prima</th>
               </tr>
             </thead>
             <tbody>
               {paginatedSchedules.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
                     No se encontraron comisiones que coincidan con la búsqueda.
                   </td>
                 </tr>
@@ -727,6 +788,10 @@ export default function ComisionesPage() {
                   const policy = policies.find(p => p.id === item.id_poliza);
                   const client = policy ? clients.find(c => c.id === policy.id_cliente) : null;
                   const isChecked = selectedIds.has(item.id);
+                  const policySchedules = schedules.filter(s => s.id_poliza === item.id_poliza);
+                  const totalCuotas = policySchedules.length || 1;
+                  const ctaStr = `${String(item.numero_cuota).padStart(2, '0')}/${String(totalCuotas).padStart(2, '0')}`;
+                  const isPaid = item.estado_pago === 'Pagado';
 
                   return (
                     <tr key={item.id} className={isChecked ? 'row-selected' : ''}>
@@ -738,63 +803,79 @@ export default function ComisionesPage() {
                         />
                       </td>
                       <td style={{ fontWeight: 600 }}>{formatDateToLocal(item.fecha_vencimiento)}</td>
-                      <td>
-                        <span className="badge badge-secondary">{policy?.compania_aseguradora}</span>
+                      <td style={{ color: '#475569' }}>
+                        {isPaid && item.fecha_pago ? formatDateToLocal(item.fecha_pago) : '—'}
                       </td>
-                      <td style={{ fontWeight: 500 }}>{client?.nombre || 'Desconocido'}</td>
-                      <td>{policy?.ramo}</td>
-                      <td style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{policy?.numero_poliza}</td>
-                      <td>Cuota {item.numero_cuota}</td>
+                      <td style={{ fontWeight: 600, textTransform: 'uppercase' }}>
+                        {client?.nombre || 'Desconocido'}
+                      </td>
+                      <td style={{ textTransform: 'uppercase' }}>{policy?.ramo || ''}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        <span style={{ textDecoration: 'underline', color: '#2563EB', cursor: 'pointer' }}>
+                          {policy?.numero_poliza}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: 'monospace' }}>{ctaStr}</td>
                       <td style={{ fontWeight: 600 }}>
                         {formatCurrency(item.monto_cuota_cliente, policy?.moneda)}
                       </td>
-                      <td style={{ fontWeight: 700, color: '#047857' }}>
+                      <td style={{ fontWeight: 700, color: '#10B981' }}>
                         {formatCurrency(item.comision_cuota_broker, policy?.moneda)}
                       </td>
                       <td>
                         <span className={`badge ${
                           item.estado_pago === 'Pagado' ? 'badge-success' :
-                          item.estado_pago === 'Vencido' ? 'badge-danger' : 'badge-info'
-                        }`} style={{ fontSize: '10px' }}>
+                          item.estado_pago === 'Vencido' ? 'badge-danger' : 'badge-warning'
+                        }`} style={{ 
+                          fontSize: '10px', 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase', 
+                          border: '1px solid',
+                          backgroundColor: 'transparent',
+                          padding: '3px 8px',
+                          borderRadius: '4px'
+                        }}>
                           {(item.estado_pago || 'Pendiente').toUpperCase()}
                         </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          item.estado_comision === 'Cobrado' ? 'badge-success' : 'badge-warning'
-                        }`} style={{ fontSize: '10px' }}>
-                          {item.estado_comision === 'Cobrado' ? 'COBRADO' : 'POR COBRAR'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '11px', color: '#475569' }}>
-                        {item.estado_comision === 'Cobrado' ? (
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span><strong>Fecha:</strong> {formatDateToLocal(item.fecha_pago_comision || '')}</span>
-                            <span><strong>Banco:</strong> {item.banco_comision || '-'}</span>
-                            <span><strong>Op/Ref:</strong> {item.nro_operacion_comision || '-'}</span>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>Pendiente</span>
-                        )}
                       </td>
                     </tr>
                   );
                 })
               )}
               
-              {/* Grand Total Row in screen & print */}
+              {/* Grand Total Rows in screen & print */}
               {filtered.length > 0 && (
-                <tr style={{ backgroundColor: '#F8FAFC', fontWeight: 'bold' }}>
-                  <td className="no-print"></td>
-                  <td colSpan={6} style={{ textAlign: 'right', fontSize: '13px' }}>TOTALES FILTRADOS:</td>
-                  <td style={{ fontSize: '13px', color: '#0F172A' }}>
-                    USD {filtered.reduce((sum, item) => sum + item.monto_cuota_cliente, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ fontSize: '13px', color: '#047857' }}>
-                    USD {filtered.reduce((sum, item) => sum + item.comision_cuota_broker, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td colSpan={3}></td>
-                </tr>
+                <>
+                  {/* PEN Totals */}
+                  <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #E2E8F0', fontWeight: 'bold' }}>
+                    <td className="no-print"></td>
+                    <td colSpan={6} style={{ textAlign: 'right', fontSize: '12.5px', color: '#475569', textTransform: 'uppercase' }}>
+                      TOTALES DEL PERIODO (PEN)
+                    </td>
+                    <td style={{ fontSize: '13px', color: '#0F172A' }}>
+                      {formatCurrencyValue(penPrimaTotal, 'PEN')}
+                    </td>
+                    <td style={{ fontSize: '13px', color: '#10B981' }}>
+                      {formatCurrencyValue(penComisionTotal, 'PEN')}
+                    </td>
+                    <td></td>
+                  </tr>
+
+                  {/* USD Totals */}
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0', fontWeight: 'bold' }}>
+                    <td className="no-print"></td>
+                    <td colSpan={6} style={{ textAlign: 'right', fontSize: '14px', color: '#0F172A', textTransform: 'uppercase' }}>
+                      TOTALES DEL PERIODO (USD)
+                    </td>
+                    <td style={{ fontSize: '18px', color: '#0F172A' }}>
+                      {formatCurrencyValue(usdPrimaTotal, 'USD')}
+                    </td>
+                    <td style={{ fontSize: '18px', color: '#10B981' }}>
+                      {formatCurrencyValue(usdComisionTotal, 'USD')}
+                    </td>
+                    <td></td>
+                  </tr>
+                </>
               )}
             </tbody>
           </table>

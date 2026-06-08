@@ -169,9 +169,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setCurrentPassword('');
         setNewPassword('');
         alert('Contraseña cambiada exitosamente.');
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Error al cambiar la contraseña. Verifique sus datos.');
       }
     } catch (err) {
       console.error(err);
+      alert('Error de conexión al cambiar la contraseña.');
     }
   };
 
@@ -180,10 +184,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Leads / Prospectos', path: '/dashboard/leads', icon: UserPlus },
     { name: 'CRM', path: '/dashboard/clientes', icon: Users },
     { name: 'Pólizas', path: '/dashboard/polizas', icon: FileText },
-    { name: 'Finanzas y Cobranzas', path: '/dashboard/finanzas', icon: DollarSign },
+    { name: 'Cobranzas', path: '/dashboard/finanzas', icon: DollarSign },
     { name: 'Comisiones', path: '/dashboard/comisiones', icon: Coins },
     { name: 'Seguimiento Siniestros', path: '/dashboard/siniestros', icon: AlertTriangle },
-    { name: 'Alertas Omnicanal', path: '/dashboard/alertas', icon: Bell },
     { name: 'Configuración', path: '/dashboard/configuracion', icon: Shield }
   ];
 
