@@ -351,7 +351,8 @@ export default function ComisionesPage() {
   // Print PDF Trigger
   const handlePrint = () => {
     const originalTitle = document.title;
-    document.title = '';
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.title = `Comisiones por cobrar - ${todayStr}`;
     window.print();
     document.title = originalTitle;
   };
