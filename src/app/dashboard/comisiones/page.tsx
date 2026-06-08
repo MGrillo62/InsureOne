@@ -70,6 +70,7 @@ export default function ComisionesPage() {
   const [schedules, setSchedules] = useState<PaymentSchedule[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [currentTenant, setCurrentTenant] = useState<{ nombre: string; ruc: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter States
@@ -116,6 +117,7 @@ export default function ComisionesPage() {
       const schRes = await fetch('/api/cronograma');
       const polRes = await fetch('/api/polizas');
       const cliRes = await fetch('/api/clientes');
+      const tenantsRes = await fetch('/api/tenants');
 
       if (schRes.ok && polRes.ok && cliRes.ok) {
         const schData = await schRes.json();
@@ -125,6 +127,17 @@ export default function ComisionesPage() {
         setSchedules(schData);
         setPolicies(polData);
         setClients(cliData);
+      }
+
+      if (tenantsRes.ok) {
+        const tenantsData = await tenantsRes.json();
+        const activeTenant = tenantsData.tenants?.find((t: any) => t.id === tenantsData.activeTenantId);
+        if (activeTenant) {
+          setCurrentTenant({
+            nombre: activeTenant.nombre,
+            ruc: activeTenant.ruc
+          });
+        }
       }
     } catch (err) {
       console.error('Error al cargar datos de comisiones:', err);
@@ -431,8 +444,8 @@ export default function ComisionesPage() {
       <div className="print-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1>InsureONE - Reporte de Comisiones por Cobrar</h1>
-            <p>Lista consolidada de comisiones pendientes de liquidación por parte de las aseguradoras.</p>
+            <h1>{currentTenant ? currentTenant.nombre : 'Broker'} - Reporte de Comisiones por Cobrar</h1>
+            <p>RUC: {currentTenant ? currentTenant.ruc : '---'} | Lista consolidada de comisiones pendientes de liquidación por parte de las aseguradoras.</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '12px', color: '#334155' }}>
             <strong>Fecha de Generación:</strong> {new Date().toLocaleDateString('es-PE')}<br />
@@ -815,8 +828,8 @@ export default function ComisionesPage() {
 
       {/* PRINT REPORT FOOTER */}
       <div className="print-footer">
-        Este documento es un reporte interno de liquidación del broker InsureONE.<br />
-        © {new Date().getFullYear()} InsureONE. Todos los derechos reservados.
+        Este documento es un reporte interno de liquidación de {currentTenant ? currentTenant.nombre : 'su broker'}.<br />
+        SaaS InsureONE | Powered by Optimus SP | https://optimussp.com
       </div>
 
       {/* MODAL: REGISTRAR COBRO EN LOTE */}
