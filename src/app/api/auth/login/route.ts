@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { validateTenantCredentials } from '@/lib/db';
+import { validateTenantCredentials, updateTenant } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +16,19 @@ export async function POST(request: Request) {
     if (!tenant) {
       return NextResponse.json({ error: 'Usuario o contraseña incorrectos' }, { status: 401 });
     }
+
+    // Update connection log in Lima time
+    const connectionTime = new Date().toLocaleString('es-PE', {
+      timeZone: 'America/Lima',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    await updateTenant(tenant.id, { ultima_conexion: connectionTime });
 
     // Determine user role and properties based on tenant and credentials
     const isSuper = tenant.id === 'T-001' && (username === 'superadmin' || username === 'admin@insureone.com');

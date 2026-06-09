@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createTenant, createTenantPago, setActiveTenantId, updateCurrentUser } from '@/lib/db';
+import { createTenant, createTenantPago, setActiveTenantId, updateCurrentUser, getGlobalConfig } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -40,6 +40,10 @@ export async function POST(request: Request) {
     const fechaInicio = formatDate(fechaInicioDate);
     const fechaFin = formatDate(fechaFinDate);
 
+    // Get dynamic global configurations
+    const globalConfig = await getGlobalConfig();
+    const paymentAmount = plan === 'anual' ? globalConfig.plan_anual_precio : globalConfig.plan_mensual_precio;
+
     // 1. Create the new Tenant record
     const newTenant = await createTenant({
       nombre: razonSocial,
@@ -49,13 +53,13 @@ export async function POST(request: Request) {
       suscripcion_tipo: suscripcionTipo,
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
-      logo_url: '',
+      logo_url: globalConfig.logo_url || '',
       admin_email: correo,
-      admin_password: password
+      admin_password: password,
+      suscripcion_monto: paymentAmount
     });
 
     // 2. Create the payment record (Culqui simulation)
-    const paymentAmount = plan === 'anual' ? 1620.00 : 150.00;
     await createTenantPago({
       id_tenant: newTenant.id,
       monto: paymentAmount,

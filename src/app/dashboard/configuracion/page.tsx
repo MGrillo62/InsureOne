@@ -14,7 +14,8 @@ import {
   Calendar, 
   Edit2, 
   RefreshCw,
-  Info
+  Info,
+  CreditCard
 } from 'lucide-react';
 
 interface Tenant {
@@ -30,6 +31,7 @@ interface Tenant {
   admin_email?: string;
   admin_password?: string;
   suscripcion_monto?: number;
+  ultima_conexion?: string;
 }
 
 export default function ConfiguracionPage() {
@@ -38,6 +40,21 @@ export default function ConfiguracionPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+
+  // Global Config states
+  const [activeMainTab, setActiveMainTab] = useState<'tenants' | 'global'>('tenants');
+  const [globalLogoUrl, setGlobalLogoUrl] = useState('');
+  const [planMensualNombre, setPlanMensualNombre] = useState('Plan Mensual');
+  const [planMensualPrecio, setPlanMensualPrecio] = useState<number>(150);
+  const [planAnualNombre, setPlanAnualNombre] = useState('Plan Anual');
+  const [planAnualPrecio, setPlanAnualPrecio] = useState<number>(1620);
+  const [moneda, setMoneda] = useState('S/.');
+  const [terminosUrl, setTerminosUrl] = useState('');
+  const [politicaCambiosUrl, setPoliticaCambiosUrl] = useState('');
+  const [condicionesUrl, setCondicionesUrl] = useState('');
+  const [culquiPublicKey, setCulquiPublicKey] = useState('');
+  const [culquiPrivateKey, setCulquiPrivateKey] = useState('');
+  const [savingGlobalConfig, setSavingGlobalConfig] = useState(false);
 
   // Modal and Form States
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,6 +86,68 @@ export default function ConfiguracionPage() {
   const [pagoComprobante, setPagoComprobante] = useState('');
   const [showRegPagoForm, setShowRegPagoForm] = useState(false);
 
+  const fetchGlobalConfig = async () => {
+    try {
+      const res = await fetch('/api/global-config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.config) {
+          setGlobalLogoUrl(data.config.logo_url || '');
+          setPlanMensualNombre(data.config.plan_mensual_nombre || 'Plan Mensual');
+          setPlanMensualPrecio(data.config.plan_mensual_precio || 150);
+          setPlanAnualNombre(data.config.plan_anual_nombre || 'Plan Anual');
+          setPlanAnualPrecio(data.config.plan_anual_precio || 1620);
+          setMoneda(data.config.moneda || 'S/.');
+          setTerminosUrl(data.config.terminos_url || '');
+          setPoliticaCambiosUrl(data.config.politica_cambios_url || '');
+          setCondicionesUrl(data.config.condiciones_url || '');
+          setCulquiPublicKey(data.config.culqui_public_key || '');
+          setCulquiPrivateKey(data.config.culqui_private_key || '');
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching global config:', err);
+    }
+  };
+
+  const handleSaveGlobalConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingGlobalConfig(true);
+    try {
+      const res = await fetch('/api/global-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config: {
+            logo_url: globalLogoUrl,
+            plan_mensual_nombre: planMensualNombre,
+            plan_mensual_precio: Number(planMensualPrecio),
+            plan_anual_nombre: planAnualNombre,
+            plan_anual_precio: Number(planAnualPrecio),
+            moneda,
+            terminos_url: terminosUrl,
+            politica_cambios_url: politicaCambiosUrl,
+            condiciones_url: condicionesUrl,
+            culqui_public_key: culquiPublicKey,
+            culqui_private_key: culquiPrivateKey
+          }
+        })
+      });
+      if (res.ok) {
+        alert('Configuración global guardada con éxito.');
+        fetchGlobalConfig();
+      } else {
+        const data = await res.json();
+        alert(`Error al guardar: ${data.error || 'No se pudo guardar la configuración global'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error en la conexión con el servidor.');
+    } finally {
+      setSavingGlobalConfig(false);
+    }
+  };
+
   const fetchTenants = async () => {
     try {
       setLoading(true);
@@ -77,6 +156,9 @@ export default function ConfiguracionPage() {
       if (userRes.ok) {
         const userData = await userRes.json();
         setUser(userData);
+        if (userData?.rol === 'Superadmin') {
+          fetchGlobalConfig();
+        }
       }
 
       const res = await fetch('/api/tenants');
@@ -316,15 +398,19 @@ export default function ConfiguracionPage() {
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Shield size={24} style={{ color: '#2563EB' }} />
-            {user?.rol === 'Superadmin' ? 'Configuración de Tenants (Superadmin)' : 'Configuración de Inquilino'}
+            {user?.rol === 'Superadmin' 
+              ? (activeMainTab === 'global' ? 'Configuración Global de la Plataforma' : 'Configuración de Tenants (Superadmin)') 
+              : 'Configuración de Inquilino'}
           </h1>
           <p style={{ color: '#64748B', fontSize: '14px', marginTop: '4px' }}>
             {user?.rol === 'Superadmin' 
-              ? 'Audita, edita y registra las cuentas de los corredores de seguros autorizados para utilizar la plataforma.' 
+              ? (activeMainTab === 'global' 
+                  ? 'Gestiona la configuración general de BrokerSync: marca, planes, enlaces legales y pasarela de pago Culqui.'
+                  : 'Audita, edita y registra las cuentas de los corredores de seguros autorizados para utilizar la plataforma.') 
               : 'Visualiza la información comercial y de suscripción de tu cuenta.'}
           </p>
         </div>
-        {user?.rol === 'Superadmin' && (
+        {user?.rol === 'Superadmin' && activeMainTab === 'tenants' && (
           <button className="btn btn-primary" onClick={handleCreateNew}>
             <Plus size={16} />
             Registrar nuevo Tenant
@@ -332,117 +418,386 @@ export default function ConfiguracionPage() {
         )}
       </div>
 
-      {/* Superadmin Alert */}
+      {/* Superadmin Main Tabs Navigation */}
       {user?.rol === 'Superadmin' && (
-        <div className="premium-card" style={{ display: 'flex', gap: '15px', padding: '16px 24px', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF', alignItems: 'flex-start', marginBottom: '25px' }}>
-          <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: '#2563EB', flexShrink: 0 }}>
-            <Info size={18} />
-          </div>
-          <div>
-            <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
-            <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
-              Como Superusuario de BrokerSync, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
-            </p>
-          </div>
+        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', marginBottom: '25px', gap: '10px' }}>
+          <button 
+            type="button"
+            style={{
+              padding: '12px 24px',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: activeMainTab === 'tenants' ? '#2563EB' : '#64748B',
+              borderBottom: activeMainTab === 'tenants' ? '2px solid #2563EB' : '2px solid transparent',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              outline: 'none'
+            }}
+            onClick={() => setActiveMainTab('tenants')}
+          >
+            Gestión de Inquilinos (Tenants)
+          </button>
+          <button 
+            type="button"
+            style={{
+              padding: '12px 24px',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: activeMainTab === 'global' ? '#2563EB' : '#64748B',
+              borderBottom: activeMainTab === 'global' ? '2px solid #2563EB' : '2px solid transparent',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              outline: 'none'
+            }}
+            onClick={() => {
+              setActiveMainTab('global');
+              fetchGlobalConfig();
+            }}
+          >
+            Configuración Global
+          </button>
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div className="premium-card" style={{ padding: '15px 20px', marginBottom: '25px' }}>
-        <div className="search-input-wrapper">
-          <Search size={18} className="search-icon" style={{ top: '12px' }} />
-          <input 
-            type="text" 
-            placeholder="Buscar por nombre de tenant, Razón Social o RUC..." 
-            className="form-input search-input" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
+      {activeMainTab === 'tenants' ? (
+        <>
+          {/* Superadmin Alert */}
+          {user?.rol === 'Superadmin' && (
+            <div className="premium-card" style={{ display: 'flex', gap: '15px', padding: '16px 24px', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF', alignItems: 'flex-start', marginBottom: '25px' }}>
+              <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: '#2563EB', flexShrink: 0 }}>
+                <Info size={18} />
+              </div>
+              <div>
+                <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
+                <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
+                  Como Superusuario de BrokerSync, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
+                </p>
+              </div>
+            </div>
+          )}
 
-      {/* Tenants Grid/Table */}
-      <div className="premium-card">
-        <div className="table-responsive">
-          <table className="premium-table">
-            <thead>
-              <tr>
-                <th>Logo</th>
-                <th>Nombre Comercial</th>
-                <th>Razón Social</th>
-                <th>RUC</th>
-                <th>Tipo Suscripción</th>
-                <th>Vigencia (Inicio - Fin)</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTenants.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
-                    No se encontraron tenants que coincidan con la búsqueda.
-                  </td>
-                </tr>
-              ) : (
-                filteredTenants.map((t) => {
-                  const isActiveTenant = t.id === activeTenantId;
-                  return (
-                    <tr key={t.id} style={{ backgroundColor: isActiveTenant ? 'rgba(37, 99, 235, 0.03)' : undefined }}>
-                      <td>
-                        {t.logo_url ? (
-                          <img 
-                            src={t.logo_url} 
-                            alt={`Logo ${t.nombre}`} 
-                            style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #E2E8F0' }} 
-                          />
-                        ) : (
-                          <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', border: '1px solid #E2E8F0' }}>
-                            {t.nombre.substring(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontWeight: 600, color: '#0F172A' }}>{t.nombre}</span>
-                          <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 500 }}>ID: {t.id} {isActiveTenant && '(Activo en sesión)'}</span>
-                        </div>
-                      </td>
-                      <td>{t.razon_social || '-'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '12.5px' }}>{t.ruc || '-'}</td>
-                      <td>
-                        <span className="badge badge-secondary">{t.suscripcion_tipo}</span>
-                      </td>
-                      <td style={{ fontSize: '12.5px', color: '#475569' }}>
-                        <div>{formatDateToLocal(t.fecha_inicio)}</div>
-                        <div style={{ fontSize: '11px', color: '#94A3B8' }}>hasta {formatDateToLocal(t.fecha_fin)}</div>
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          t.estado === 'Activo' ? 'badge-success' :
-                          t.estado === 'Suspendido' ? 'badge-warning' : 'badge-danger'
-                        }`}>
-                          {t.estado.toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        <button 
-                          className="btn btn-secondary btn-sm"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          onClick={() => handleEdit(t)}
-                        >
-                          <Edit2 size={12} />
-                          {user?.rol === 'Superadmin' ? 'Editar' : 'Ver Detalles'}
-                        </button>
+          {/* Filter and Search Bar */}
+          <div className="premium-card" style={{ padding: '15px 20px', marginBottom: '25px' }}>
+            <div className="search-input-wrapper">
+              <Search size={18} className="search-icon" style={{ top: '12px' }} />
+              <input 
+                type="text" 
+                placeholder="Buscar por nombre de tenant, Razón Social o RUC..." 
+                className="form-input search-input" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Tenants Grid/Table */}
+          <div className="premium-card">
+            <div className="table-responsive">
+              <table className="premium-table">
+                <thead>
+                  <tr>
+                    <th>Logo</th>
+                    <th>Nombre Comercial</th>
+                    <th>Razón Social</th>
+                    <th>RUC</th>
+                    <th>Tipo Suscripción</th>
+                    <th>Vigencia (Inicio - Fin)</th>
+                    <th>Último Acceso</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTenants.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                        No se encontraron tenants que coincidan con la búsqueda.
                       </td>
                     </tr>
-                  );
-                })
+                  ) : (
+                    filteredTenants.map((t) => {
+                      const isActiveTenant = t.id === activeTenantId;
+                      return (
+                        <tr key={t.id} style={{ backgroundColor: isActiveTenant ? 'rgba(37, 99, 235, 0.03)' : undefined }}>
+                          <td>
+                            {t.logo_url ? (
+                              <img 
+                                src={t.logo_url} 
+                                alt={`Logo ${t.nombre}`} 
+                                style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #E2E8F0' }} 
+                              />
+                            ) : (
+                              <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', border: '1px solid #E2E8F0' }}>
+                                {t.nombre.substring(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, color: '#0F172A' }}>{t.nombre}</span>
+                              <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 500 }}>ID: {t.id} {isActiveTenant && '(Activo en sesión)'}</span>
+                            </div>
+                          </td>
+                          <td>{t.razon_social || '-'}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '12.5px' }}>{t.ruc || '-'}</td>
+                          <td>
+                            <span className="badge badge-secondary">{t.suscripcion_tipo}</span>
+                          </td>
+                          <td style={{ fontSize: '12.5px', color: '#475569' }}>
+                            <div>{formatDateToLocal(t.fecha_inicio)}</div>
+                            <div style={{ fontSize: '11px', color: '#94A3B8' }}>hasta {formatDateToLocal(t.fecha_fin)}</div>
+                          </td>
+                          <td style={{ fontSize: '12.5px', color: '#475569', fontWeight: 500 }}>
+                            {t.ultima_conexion || 'Nunca'}
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              t.estado === 'Activo' ? 'badge-success' :
+                              t.estado === 'Suspendido' ? 'badge-warning' : 'badge-danger'
+                            }`}>
+                              {t.estado.toUpperCase()}
+                            </span>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-secondary btn-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => handleEdit(t)}
+                            >
+                              <Edit2 size={12} />
+                              {user?.rol === 'Superadmin' ? 'Editar' : 'Ver Detalles'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Global Config UI */
+        <form onSubmit={handleSaveGlobalConfig} className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '25px', marginBottom: '40px' }}>
+          {/* Logo brand and metadata card */}
+          <div className="premium-card" style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building2 size={18} style={{ color: '#2563EB' }} />
+                Identidad de Marca y Logo Global
+              </h3>
+              <div className="form-group">
+                <label className="form-label">URL del Logo de la Plataforma</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="https://ejemplo.com/logo.png" 
+                  value={globalLogoUrl} 
+                  onChange={(e) => setGlobalLogoUrl(e.target.value)} 
+                />
+                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                  Este logo aparecerá en la pantalla de inicio de sesión y registro de BrokerSync.
+                </span>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0', minHeight: '130px' }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '10px' }}>VISTA PREVIA DEL LOGO</span>
+              {globalLogoUrl ? (
+                <img 
+                  src={globalLogoUrl} 
+                  alt="Preview Logo" 
+                  style={{ maxHeight: '60px', maxWidth: '100%', objectFit: 'contain' }}
+                  onError={(e) => {
+                    (e.target as any).src = 'https://placehold.co/200x60/f1f5f9/64748b?text=Error+en+Imagen';
+                  }}
+                />
+              ) : (
+                <span style={{ color: '#94A3B8', fontSize: '13px', fontStyle: 'italic' }}>Sin logo configurado</span>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          </div>
+
+          {/* Membership pricing card */}
+          <div className="premium-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CreditCard size={18} style={{ color: '#2563EB' }} />
+              Planes de Suscripción y Precios
+            </h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '20px', marginBottom: '15px' }}>
+              <div className="form-group">
+                <label className="form-label">Moneda de los Planes</label>
+                <select 
+                  className="form-input" 
+                  value={moneda} 
+                  onChange={(e) => setMoneda(e.target.value)}
+                >
+                  <option value="S/.">Soles (S/.)</option>
+                  <option value="USD">Dólares (USD)</option>
+                  <option value="PEN">PEN (Soles estándar)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              {/* Plan Mensual */}
+              <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1E293B', marginBottom: '15px' }}>Configuración Plan Mensual</h4>
+                <div className="form-group">
+                  <label className="form-label">Nombre del Plan</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Plan Mensual" 
+                    value={planMensualNombre} 
+                    onChange={(e) => setPlanMensualNombre(e.target.value)} 
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Precio del Plan</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#475569' }}>{moneda}</span>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      className="form-input" 
+                      placeholder="150.00" 
+                      value={planMensualPrecio} 
+                      onChange={(e) => setPlanMensualPrecio(parseFloat(e.target.value) || 0)} 
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Plan Anual */}
+              <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1E293B', marginBottom: '15px' }}>Configuración Plan Anual</h4>
+                <div className="form-group">
+                  <label className="form-label">Nombre del Plan</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Plan Anual" 
+                    value={planAnualNombre} 
+                    onChange={(e) => setPlanAnualNombre(e.target.value)} 
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Precio del Plan</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#475569' }}>{moneda}</span>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      className="form-input" 
+                      placeholder="1620.00" 
+                      value={planAnualPrecio} 
+                      onChange={(e) => setPlanAnualPrecio(parseFloat(e.target.value) || 0)} 
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Legal documents card */}
+          <div className="premium-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Globe size={18} style={{ color: '#2563EB' }} />
+              Enlaces de Documentos Legales y Políticas
+            </h3>
+            <div className="form-group">
+              <label className="form-label">URL de Términos y Condiciones</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="https://cloudinary.com/terminos.pdf" 
+                value={terminosUrl} 
+                onChange={(e) => setTerminosUrl(e.target.value)} 
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">URL de Política de Cambios y Devoluciones</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="https://cloudinary.com/politica-cambios.pdf" 
+                value={politicaCambiosUrl} 
+                onChange={(e) => setPoliticaCambiosUrl(e.target.value)} 
+                required
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">URL de Condiciones Generales</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="https://cloudinary.com/condiciones.pdf" 
+                value={condicionesUrl} 
+                onChange={(e) => setCondicionesUrl(e.target.value)} 
+                required
+              />
+            </div>
+          </div>
+
+          {/* Culqui configuration card */}
+          <div className="premium-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Shield size={18} style={{ color: '#2563EB' }} />
+              Credenciales de la Pasarela Culqui (Integración Oficial)
+            </h3>
+            <div style={{ padding: '12px 16px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', color: '#1E40AF', fontSize: '13px', marginBottom: '20px' }}>
+              <strong>Nota:</strong> Estas credenciales se utilizan para tokenizar y procesar los cargos de las membresías de los inquilinos. El modo de operación configurado en producción procesará transacciones reales en Soles.
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Llave Pública (Public Key)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="pk_live_..." 
+                  value={culquiPublicKey} 
+                  onChange={(e) => setCulquiPublicKey(e.target.value)} 
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Llave Privada / Secreta (Private Key)</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="sk_live_..." 
+                  value={culquiPrivateKey} 
+                  onChange={(e) => setCulquiPrivateKey(e.target.value)} 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Save button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+            <button 
+              type="submit" 
+              className="btn btn-primary btn-glow"
+              disabled={savingGlobalConfig}
+              style={{ padding: '12px 30px', fontWeight: 'bold' }}
+            >
+              {savingGlobalConfig ? 'Guardando configuración...' : 'Guardar Configuración Global'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* CREATE / EDIT TENANT MODAL */}
       {modalOpen && (

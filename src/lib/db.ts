@@ -26,6 +26,7 @@ export interface Tenant {
   admin_email?: string;
   admin_password?: string;
   suscripcion_monto?: number;
+  ultima_conexion?: string;
 }
 
 export interface TenantPago {
@@ -230,6 +231,22 @@ export async function initializeDatabase() {
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_email VARCHAR(150);
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_password VARCHAR(100);
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suscripcion_monto NUMERIC(12, 2) DEFAULT 0.00;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ultima_conexion VARCHAR(100);
+      
+      CREATE TABLE IF NOT EXISTS global_config (
+        id INT PRIMARY KEY,
+        logo_url TEXT,
+        plan_mensual_nombre VARCHAR(100),
+        plan_mensual_precio NUMERIC(12, 2),
+        plan_anual_nombre VARCHAR(100),
+        plan_anual_precio NUMERIC(12, 2),
+        moneda VARCHAR(10),
+        terminos_url TEXT,
+        politica_cambios_url TEXT,
+        condiciones_url TEXT,
+        culqui_public_key VARCHAR(100),
+        culqui_private_key VARCHAR(100)
+      );
       
       CREATE TABLE IF NOT EXISTS tenant_pagos (
         id VARCHAR(10) PRIMARY KEY,
@@ -498,6 +515,29 @@ export async function initializeDatabase() {
       }
     }
 
+    // Seed initial global config if empty
+    const gcCheck = await pool.query('SELECT count(*) FROM global_config');
+    const gcCount = parseInt(gcCheck.rows[0].count);
+    if (gcCount === 0) {
+      console.log('Seeding initial global config...');
+      await pool.query(`
+        INSERT INTO global_config (
+          id, logo_url, plan_mensual_nombre, plan_mensual_precio, plan_anual_nombre, plan_anual_precio, 
+          moneda, terminos_url, politica_cambios_url, condiciones_url, culqui_public_key, culqui_private_key
+        ) VALUES (
+          1, 
+          'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Optimus_Logo_v1.png', 
+          'Plan Mensual', 150.00, 
+          'Plan Anual', 1620.00, 
+          'S/.', 
+          'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf', 
+          'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf', 
+          'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf',
+          '', ''
+        )
+      `);
+    }
+
     databaseInitialized = true;
   } catch (err) {
     console.error('Error initializing Neon database:', err);
@@ -570,6 +610,111 @@ export async function getCurrentUser(): Promise<User> {
 
 export async function updateCurrentUser(user: Partial<User>): Promise<void> {
   currentUser = { ...currentUser, ...user };
+}
+
+export interface GlobalConfig {
+  logo_url: string;
+  plan_mensual_nombre: string;
+  plan_mensual_precio: number;
+  plan_anual_nombre: string;
+  plan_anual_precio: number;
+  moneda: string;
+  terminos_url: string;
+  politica_cambios_url: string;
+  condiciones_url: string;
+  culqui_public_key: string;
+  culqui_private_key: string;
+}
+
+export async function getGlobalConfig(): Promise<GlobalConfig> {
+  await initializeDatabase();
+  try {
+    const res = await pool.query('SELECT * FROM global_config WHERE id = 1');
+    if (res.rows.length === 0) {
+      return {
+        logo_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Optimus_Logo_v1.png',
+        plan_mensual_nombre: 'Plan Mensual',
+        plan_mensual_precio: 150.00,
+        plan_anual_nombre: 'Plan Anual',
+        plan_anual_precio: 1620.00,
+        moneda: 'S/.',
+        terminos_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf',
+        politica_cambios_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf',
+        condiciones_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf',
+        culqui_public_key: '',
+        culqui_private_key: ''
+      };
+    }
+    const row = res.rows[0];
+    return {
+      logo_url: row.logo_url || '',
+      plan_mensual_nombre: row.plan_mensual_nombre || 'Plan Mensual',
+      plan_mensual_precio: row.plan_mensual_precio ? parseFloat(row.plan_mensual_precio) : 150.00,
+      plan_anual_nombre: row.plan_anual_nombre || 'Plan Anual',
+      plan_anual_precio: row.plan_anual_precio ? parseFloat(row.plan_anual_precio) : 1620.00,
+      moneda: row.moneda || 'S/.',
+      terminos_url: row.terminos_url || '',
+      politica_cambios_url: row.politica_cambios_url || '',
+      condiciones_url: row.condiciones_url || '',
+      culqui_public_key: row.culqui_public_key || '',
+      culqui_private_key: row.culqui_private_key || ''
+    };
+  } catch (error) {
+    console.error('Error fetching global config:', error);
+    return {
+      logo_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Optimus_Logo_v1.png',
+      plan_mensual_nombre: 'Plan Mensual',
+      plan_mensual_precio: 150.00,
+      plan_anual_nombre: 'Plan Anual',
+      plan_anual_precio: 1620.00,
+      moneda: 'S/.',
+      terminos_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf',
+      politica_cambios_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf',
+      condiciones_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf',
+      culqui_public_key: '',
+      culqui_private_key: ''
+    };
+  }
+}
+
+export async function updateGlobalConfig(config: Partial<GlobalConfig>): Promise<GlobalConfig> {
+  await initializeDatabase();
+  const current = await getGlobalConfig();
+  const merged = { ...current, ...config };
+  
+  await pool.query(
+    `INSERT INTO global_config (
+      id, logo_url, plan_mensual_nombre, plan_mensual_precio, plan_anual_nombre, plan_anual_precio, 
+      moneda, terminos_url, politica_cambios_url, condiciones_url, culqui_public_key, culqui_private_key
+    ) VALUES (
+      1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    ) ON CONFLICT (id) DO UPDATE SET
+      logo_url = EXCLUDED.logo_url,
+      plan_mensual_nombre = EXCLUDED.plan_mensual_nombre,
+      plan_mensual_precio = EXCLUDED.plan_mensual_precio,
+      plan_anual_nombre = EXCLUDED.plan_anual_nombre,
+      plan_anual_precio = EXCLUDED.plan_anual_precio,
+      moneda = EXCLUDED.moneda,
+      terminos_url = EXCLUDED.terminos_url,
+      politica_cambios_url = EXCLUDED.politica_cambios_url,
+      condiciones_url = EXCLUDED.condiciones_url,
+      culqui_public_key = EXCLUDED.culqui_public_key,
+      culqui_private_key = EXCLUDED.culqui_private_key`,
+    [
+      merged.logo_url,
+      merged.plan_mensual_nombre,
+      Number(merged.plan_mensual_precio),
+      merged.plan_anual_nombre,
+      Number(merged.plan_anual_precio),
+      merged.moneda,
+      merged.terminos_url,
+      merged.politica_cambios_url,
+      merged.condiciones_url,
+      merged.culqui_public_key,
+      merged.culqui_private_key
+    ]
+  );
+  return merged;
 }
 
 // CRUD - Tenants

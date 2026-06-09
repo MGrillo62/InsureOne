@@ -69,6 +69,44 @@ export default function LoginPage() {
     setPaymentError('');
   }, [step]);
 
+  // Dynamic Global Configuration
+  const [globalConfig, setGlobalConfig] = useState<any>({
+    logo_url: '/logo.png',
+    plan_mensual_nombre: 'Plan Mensual',
+    plan_mensual_precio: 150.00,
+    plan_anual_nombre: 'Plan Anual',
+    plan_anual_precio: 1620.00,
+    moneda: 'S/.',
+    terminos_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf',
+    politica_cambios_url: 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf'
+  });
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch('/api/global-config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.config) {
+            setGlobalConfig({
+              logo_url: data.config.logo_url || '/logo.png',
+              plan_mensual_nombre: data.config.plan_mensual_nombre || 'Plan Mensual',
+              plan_mensual_precio: data.config.plan_mensual_precio || 150.00,
+              plan_anual_nombre: data.config.plan_anual_nombre || 'Plan Anual',
+              plan_anual_precio: data.config.plan_anual_precio || 1620.00,
+              moneda: data.config.moneda || 'S/.',
+              terminos_url: data.config.terminos_url || 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf',
+              politica_cambios_url: data.config.politica_cambios_url || 'https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf'
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading config:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
+
   // Handle Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,7 +230,9 @@ export default function LoginPage() {
     }
   };
 
-  const currentPrice = regData.plan === 'anual' ? 'S/. 1,620' : 'S/. 150';
+  const currentPrice = regData.plan === 'anual' 
+    ? `${globalConfig.moneda} ${Number(globalConfig.plan_anual_precio).toLocaleString('es-PE', { minimumFractionDigits: 2 })}` 
+    : `${globalConfig.moneda} ${Number(globalConfig.plan_mensual_precio).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`;
 
   return (
     <div className="login-page">
@@ -203,12 +243,16 @@ export default function LoginPage() {
           <div className="login-card animate-fade-in">
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
               <img 
-                src="/logo.png" 
+                src={globalConfig.logo_url} 
                 alt="BrokerSync Logo" 
                 style={{ width: '220px', height: 'auto', objectFit: 'contain' }} 
+                onError={(e) => {
+                  (e.target as any).src = '/logo.png';
+                }}
               />
             </div>
-            <p className="login-subtitle">Sistema de Control de Pólizas y Cobranzas</p>
+            <p className="login-subtitle" style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '800', color: '#4f46e5', margin: '0.75rem 0', textAlign: 'center', fontFamily: "'Outfit', sans-serif" }}>DOMINA EL ECOSISTEMA DE TUS SEGUROS EN UN SOLO LUGAR</p>
+            <p className="login-subtitle-secondary" style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', marginBottom: '2rem', marginTop: '-0.25rem', fontWeight: '500' }}>Visión 360° para el corredor de seguros moderno</p>
             
             {loginError && <div className="error-message">{loginError}</div>}
             
@@ -290,7 +334,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <a
-                  href="https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/T%C3%A9rminos_y_Condiciones_-_Sistema_Web_de_Cotizaci%C3%B3n_de_Importaciones_spfnae.pdf"
+                  href={globalConfig.terminos_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-secondary btn-sm"
@@ -308,7 +352,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <a
-                  href="https://res.cloudinary.com/dsqe7utsy/image/upload/v1780280028/Pol%C3%ADtica_de_Cambios_Devoluciones_y_Cancelaciones_-_Sistema_SaaS_tpplbe.pdf"
+                  href={globalConfig.politica_cambios_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-secondary btn-sm"
@@ -533,9 +577,9 @@ export default function LoginPage() {
                 onClick={() => setRegData({ ...regData, plan: 'mensual' })}
               >
                 <div className="plan-header">
-                  <span className="plan-name">Plan Mensual</span>
+                  <span className="plan-name">{globalConfig.plan_mensual_nombre}</span>
                   <div className="plan-price">
-                    <span className="price-amount">S/. 150</span>
+                    <span className="price-amount">{globalConfig.moneda} {globalConfig.plan_mensual_precio}</span>
                     <span className="price-period">/ mes</span>
                   </div>
                   <span className="save-period">(Precios incluyen IGV)</span>
@@ -557,9 +601,9 @@ export default function LoginPage() {
               >
                 <span className="recommended-badge">Recomendado - Ahorra 10%</span>
                 <div className="plan-header">
-                  <span className="plan-name">Plan Anual</span>
+                  <span className="plan-name">{globalConfig.plan_anual_nombre}</span>
                   <div className="plan-price">
-                    <span className="price-amount">S/. 1,620</span>
+                    <span className="price-amount">{globalConfig.moneda} {Number(globalConfig.plan_anual_precio).toLocaleString('es-PE')}</span>
                     <span className="price-period">/ año</span>
                   </div>
                   <span className="save-period">(10% de Descuento - Incluye IGV)</span>
