@@ -220,7 +220,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <ul className="sidebar-menu">
           {menuItems.map((item) => {
-            if (item.path === '/dashboard/configuracion' && user?.rol !== 'Superadmin') {
+            if (item.path === '/dashboard/configuracion' && user?.rol !== 'Superadmin' && user?.rol !== 'Admin') {
               return null;
             }
             const Icon = item.icon;

@@ -25,6 +25,7 @@ export interface Tenant {
   logo_url?: string;
   admin_email?: string;
   admin_password?: string;
+  suscripcion_monto?: number;
 }
 
 export interface TenantPago {
@@ -228,6 +229,7 @@ export async function initializeDatabase() {
       
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_email VARCHAR(150);
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS admin_password VARCHAR(100);
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suscripcion_monto NUMERIC(12, 2) DEFAULT 0.00;
       
       CREATE TABLE IF NOT EXISTS tenant_pagos (
         id VARCHAR(10) PRIMARY KEY,
@@ -572,7 +574,10 @@ export async function updateCurrentUser(user: Partial<User>): Promise<void> {
 export async function getTenants(): Promise<Tenant[]> {
   await initializeDatabase();
   const res = await pool.query('SELECT * FROM tenants ORDER BY id ASC');
-  return res.rows;
+  return res.rows.map(row => ({
+    ...row,
+    suscripcion_monto: row.suscripcion_monto ? parseFloat(row.suscripcion_monto) : 0
+  }));
 }
 
 export async function createTenant(tenantData: Omit<Tenant, 'id'>): Promise<Tenant> {
@@ -587,15 +592,22 @@ export async function createTenant(tenantData: Omit<Tenant, 'id'>): Promise<Tena
   const newId = `T-${String(nextNum).padStart(3, '0')}`;
 
   const res = await pool.query(
-    `INSERT INTO tenants (id, nombre, ruc, razon_social, estado, suscripcion_tipo, fecha_inicio, fecha_fin, logo_url, admin_email, admin_password) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-    [newId, tenantData.nombre, tenantData.ruc, tenantData.razon_social, tenantData.estado, tenantData.suscripcion_tipo, tenantData.fecha_inicio, tenantData.fecha_fin, tenantData.logo_url || '', tenantData.admin_email || '', tenantData.admin_password || '']
+    `INSERT INTO tenants (id, nombre, ruc, razon_social, estado, suscripcion_tipo, fecha_inicio, fecha_fin, logo_url, admin_email, admin_password, suscripcion_monto) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    [newId, tenantData.nombre, tenantData.ruc, tenantData.razon_social, tenantData.estado, tenantData.suscripcion_tipo, tenantData.fecha_inicio, tenantData.fecha_fin, tenantData.logo_url || '', tenantData.admin_email || '', tenantData.admin_password || '', tenantData.suscripcion_monto || 0]
   );
-  return res.rows[0];
+  return {
+    ...res.rows[0],
+    suscripcion_monto: res.rows[0].suscripcion_monto ? parseFloat(res.rows[0].suscripcion_monto) : 0
+  };
 }
 
 export async function updateTenant(id: string, updatedFields: Partial<Omit<Tenant, 'id'>>): Promise<Tenant> {
-  return updateTableRecord('tenants', id, updatedFields);
+  const row = await updateTableRecord('tenants', id, updatedFields);
+  return {
+    ...row,
+    suscripcion_monto: row.suscripcion_monto ? parseFloat(row.suscripcion_monto) : 0
+  };
 }
 
 // CRUD - Tenant Subscription Payments

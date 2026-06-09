@@ -29,6 +29,7 @@ interface Tenant {
   logo_url?: string;
   admin_email?: string;
   admin_password?: string;
+  suscripcion_monto?: number;
 }
 
 export default function ConfiguracionPage() {
@@ -36,6 +37,7 @@ export default function ConfiguracionPage() {
   const [activeTenantId, setActiveTenantId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   // Modal and Form States
   const [modalOpen, setModalOpen] = useState(false);
@@ -48,6 +50,7 @@ export default function ConfiguracionPage() {
   const [ruc, setRuc] = useState('');
   const [estado, setEstado] = useState<'Activo' | 'Suspendido' | 'Eliminado'>('Activo');
   const [suscripcionTipo, setSuscripcionTipo] = useState<'Mensual' | 'Anual'>('Anual');
+  const [suscripcionMonto, setSuscripcionMonto] = useState<number>(0);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
@@ -69,6 +72,13 @@ export default function ConfiguracionPage() {
   const fetchTenants = async () => {
     try {
       setLoading(true);
+      
+      const userRes = await fetch('/api/auth');
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUser(userData);
+      }
+
       const res = await fetch('/api/tenants');
       if (res.ok) {
         const data = await res.json();
@@ -125,6 +135,7 @@ export default function ConfiguracionPage() {
     setRuc(t.ruc || '');
     setEstado(t.estado || 'Activo');
     setSuscripcionTipo(t.suscripcion_tipo || 'Anual');
+    setSuscripcionMonto(t.suscripcion_monto || 0);
     setFechaInicio(t.fecha_inicio || '');
     setFechaFin(t.fecha_fin || '');
     setLogoUrl(t.logo_url || '');
@@ -141,6 +152,7 @@ export default function ConfiguracionPage() {
     setRuc('');
     setEstado('Activo');
     setSuscripcionTipo('Anual');
+    setSuscripcionMonto(0);
     setAdminEmail('');
     setAdminPassword('');
     
@@ -165,6 +177,7 @@ export default function ConfiguracionPage() {
     setPagoMonto('');
     setPagoFecha('');
     setPagoComprobante('');
+    setSuscripcionMonto(0);
     setShowRegPagoForm(false);
   };
 
@@ -196,6 +209,7 @@ export default function ConfiguracionPage() {
           ruc,
           estado,
           suscripcion_tipo: suscripcionTipo,
+          suscripcion_monto: Number(suscripcionMonto),
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
           logo_url: logoUrl,
@@ -284,30 +298,36 @@ export default function ConfiguracionPage() {
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Shield size={24} style={{ color: '#2563EB' }} />
-            Configuración de Tenants (Superadmin)
+            {user?.rol === 'Superadmin' ? 'Configuración de Tenants (Superadmin)' : 'Configuración de Inquilino'}
           </h1>
           <p style={{ color: '#64748B', fontSize: '14px', marginTop: '4px' }}>
-            Audita, edita y registra las cuentas de los corredores de seguros autorizados para utilizar la plataforma.
+            {user?.rol === 'Superadmin' 
+              ? 'Audita, edita y registra las cuentas de los corredores de seguros autorizados para utilizar la plataforma.' 
+              : 'Visualiza la información comercial y de suscripción de tu cuenta.'}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleCreateNew}>
-          <Plus size={16} />
-          Registrar nuevo Tenant
-        </button>
+        {user?.rol === 'Superadmin' && (
+          <button className="btn btn-primary" onClick={handleCreateNew}>
+            <Plus size={16} />
+            Registrar nuevo Tenant
+          </button>
+        )}
       </div>
 
       {/* Superadmin Alert */}
-      <div className="premium-card" style={{ display: 'flex', gap: '15px', padding: '16px 24px', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF', alignItems: 'flex-start', marginBottom: '25px' }}>
-        <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: '#2563EB', flexShrink: 0 }}>
-          <Info size={18} />
+      {user?.rol === 'Superadmin' && (
+        <div className="premium-card" style={{ display: 'flex', gap: '15px', padding: '16px 24px', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF', alignItems: 'flex-start', marginBottom: '25px' }}>
+          <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: '#2563EB', flexShrink: 0 }}>
+            <Info size={18} />
+          </div>
+          <div>
+            <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
+            <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
+              Como Superusuario de BrokerSync, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
+            </p>
+          </div>
         </div>
-        <div>
-          <span style={{ fontWeight: 700, display: 'block', fontSize: '14px' }}>Panel de Control de Inquilinos</span>
-          <p style={{ fontSize: '13px', marginTop: '2px', color: '#1E3A8A' }}>
-            Como Superusuario de BrokerSync, puedes suspender o desactivar accesos a las agencias. Los cambios en el estado del Tenant afectarán los logins de sus analistas de forma inmediata.
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="premium-card" style={{ padding: '15px 20px', marginBottom: '25px' }}>
@@ -394,7 +414,7 @@ export default function ConfiguracionPage() {
                           onClick={() => handleEdit(t)}
                         >
                           <Edit2 size={12} />
-                          Editar
+                          {user?.rol === 'Superadmin' ? 'Editar' : 'Ver Detalles'}
                         </button>
                       </td>
                     </tr>
@@ -411,7 +431,7 @@ export default function ConfiguracionPage() {
         <div className="modal-overlay">
           <div className="modal-content large" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div className="modal-header" style={{ flexShrink: 0 }}>
-              <h3 className="modal-title">{editingTenantId ? 'Editar Configuración de Inquilino' : 'Registrar Nuevo Inquilino'}</h3>
+              <h3 className="modal-title">{editingTenantId ? (user?.rol === 'Superadmin' ? 'Editar Configuración de Inquilino' : 'Configuración de Inquilino') : 'Registrar Nuevo Inquilino'}</h3>
               <button className="modal-close-btn" onClick={handleCloseModal}>&times;</button>
             </div>
             
@@ -476,6 +496,7 @@ export default function ConfiguracionPage() {
                           value={nombre} 
                           onChange={(e) => setNombre(e.target.value)} 
                           required 
+                          disabled={user?.rol !== 'Superadmin'}
                         />
                       </div>
                       <div className="form-group">
@@ -487,6 +508,7 @@ export default function ConfiguracionPage() {
                           value={razonSocial} 
                           onChange={(e) => setRazonSocial(e.target.value)} 
                           required 
+                          disabled={user?.rol !== 'Superadmin'}
                         />
                       </div>
                     </div>
@@ -502,6 +524,7 @@ export default function ConfiguracionPage() {
                           value={ruc} 
                           onChange={(e) => setRuc(e.target.value.replace(/\D/g, ''))} 
                           required 
+                          disabled={user?.rol !== 'Superadmin'}
                         />
                       </div>
                       <div className="form-group">
@@ -516,13 +539,14 @@ export default function ConfiguracionPage() {
                       </div>
                     </div>
 
-                    <div className="grid-cols-2">
+                    <div className="grid-cols-3">
                       <div className="form-group">
                         <label className="form-label">Estado del Inquilino *</label>
                         <select 
                           className="form-input" 
                           value={estado} 
                           onChange={(e: any) => setEstado(e.target.value)}
+                          disabled={user?.rol !== 'Superadmin'}
                         >
                           <option value="Activo">Activo (Acceso completo)</option>
                           <option value="Suspendido">Suspendido (Modo lectura/bloqueado)</option>
@@ -535,10 +559,23 @@ export default function ConfiguracionPage() {
                           className="form-input" 
                           value={suscripcionTipo} 
                           onChange={(e: any) => setSuscripcionTipo(e.target.value)}
+                          disabled={user?.rol !== 'Superadmin'}
                         >
                           <option value="Mensual">Mensual (Facturación recurrente)</option>
                           <option value="Anual">Anual (Facturación anualizada)</option>
                         </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Monto de suscripción (inc IGV):</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          className="form-input" 
+                          placeholder="0.00"
+                          value={suscripcionMonto} 
+                          onChange={(e) => setSuscripcionMonto(parseFloat(e.target.value) || 0)}
+                          disabled={user?.rol !== 'Superadmin'}
+                        />
                       </div>
                     </div>
 
@@ -551,6 +588,7 @@ export default function ConfiguracionPage() {
                           value={fechaInicio} 
                           onChange={(e) => setFechaInicio(e.target.value)} 
                           required 
+                          disabled={user?.rol !== 'Superadmin'}
                         />
                       </div>
                       <div className="form-group">
@@ -562,6 +600,7 @@ export default function ConfiguracionPage() {
                           value={fechaFin} 
                           onChange={(e) => setFechaFin(e.target.value)} 
                           required 
+                          disabled={user?.rol !== 'Superadmin'}
                         />
                       </div>
                     </div>
@@ -578,6 +617,7 @@ export default function ConfiguracionPage() {
                             placeholder="admin@corredor.com" 
                             value={adminEmail} 
                             onChange={(e) => setAdminEmail(e.target.value)} 
+                            disabled={user?.rol !== 'Superadmin'}
                           />
                         </div>
                         <div className="form-group">
@@ -588,6 +628,7 @@ export default function ConfiguracionPage() {
                             placeholder="Contraseña" 
                             value={adminPassword} 
                             onChange={(e) => setAdminPassword(e.target.value)} 
+                            disabled={user?.rol !== 'Superadmin'}
                           />
                         </div>
                       </div>
@@ -634,6 +675,11 @@ export default function ConfiguracionPage() {
                       </div>
 
                       <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                        <span style={{ color: '#64748B' }}>Monto suscripción:</span>
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>USD {Number(suscripcionMonto || 0).toFixed(2)}</span>
+                      </div>
+
+                      <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                         <span style={{ color: '#64748B' }}>Vence el:</span>
                         <span style={{ fontWeight: 600, color: '#0F172A' }}>{fechaFin ? formatDateToLocal(fechaFin) : '--/--/----'}</span>
                       </div>
@@ -660,7 +706,7 @@ export default function ConfiguracionPage() {
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1, padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                   <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>Historial de Pagos de Suscripción</h4>
-                  {!showRegPagoForm && (
+                  {user?.rol === 'Superadmin' && !showRegPagoForm && (
                     <button 
                       type="button" 
                       className="btn btn-primary btn-sm"

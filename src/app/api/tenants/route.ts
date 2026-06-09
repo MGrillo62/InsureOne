@@ -13,7 +13,24 @@ import {
 
 export async function GET() {
   try {
-    const tenants = await getTenants();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('insureone_session');
+    let isSuper = false;
+    let tenantId = '';
+    
+    if (sessionCookie && sessionCookie.value) {
+      const sessionUser = JSON.parse(sessionCookie.value);
+      isSuper = sessionUser.rol === 'Superadmin';
+      tenantId = sessionUser.id_tenant;
+    }
+
+    let tenants = await getTenants();
+    
+    // Si no es superadmin, restringimos la lista solo a su propio tenant
+    if (!isSuper && tenantId) {
+      tenants = tenants.filter(t => t.id === tenantId);
+    }
+
     const activeTenantId = await getActiveTenantId();
     return NextResponse.json({ tenants, activeTenantId });
   } catch (error) {
