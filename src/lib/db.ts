@@ -539,13 +539,15 @@ async function updateTableRecord(tableName: string, id: string, updatedFields: R
   const idIndex = index;
   index++;
 
-  const activeId = await getRequestTenantId();
-  values.push(activeId);
-  const tenantIndex = index;
-
-  const whereClause = tableName === 'tenants' || tableName === 'aseguradoras'
-    ? `WHERE id = $${idIndex}`
-    : `WHERE id = $${idIndex} AND id_tenant = $${tenantIndex}`;
+  let whereClause = '';
+  if (tableName === 'tenants' || tableName === 'aseguradoras') {
+    whereClause = `WHERE id = $${idIndex}`;
+  } else {
+    const activeId = await getRequestTenantId();
+    values.push(activeId);
+    const tenantIndex = index;
+    whereClause = `WHERE id = $${idIndex} AND id_tenant = $${tenantIndex}`;
+  }
 
   const query = `UPDATE ${tableName} SET ${setClauses.join(', ')} ${whereClause} RETURNING *`;
   const res = await pool.query(query, values);
