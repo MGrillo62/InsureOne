@@ -192,7 +192,7 @@ export default function LoginPage() {
     }
   };
 
-  const currentPrice = regData.plan === 'anual' ? '$490 USD' : '$49 USD';
+  const currentPrice = regData.plan === 'anual' ? 'S/. 1,620' : 'S/. 150';
 
   return (
     <div className="login-page">
@@ -201,7 +201,13 @@ export default function LoginPage() {
         {/* STEP 0: LOGIN CARD */}
         {step === 'login' && (
           <div className="login-card animate-fade-in">
-            <h1 className="login-title">BrokerSync</h1>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+              <img 
+                src="/logo.png" 
+                alt="BrokerSync Logo" 
+                style={{ width: '220px', height: 'auto', objectFit: 'contain' }} 
+              />
+            </div>
             <p className="login-subtitle">Sistema de Control de Pólizas y Cobranzas</p>
             
             {loginError && <div className="error-message">{loginError}</div>}
@@ -529,9 +535,10 @@ export default function LoginPage() {
                 <div className="plan-header">
                   <span className="plan-name">Plan Mensual</span>
                   <div className="plan-price">
-                    <span className="price-amount">$49 USD</span>
+                    <span className="price-amount">S/. 150</span>
                     <span className="price-period">/ mes</span>
                   </div>
+                  <span className="save-period">(Precios incluyen IGV)</span>
                 </div>
                 <div className="plan-body">
                   <ul className="plan-features">
@@ -548,14 +555,14 @@ export default function LoginPage() {
                 className={`plan-card recommended ${regData.plan === 'anual' ? 'selected' : ''}`}
                 onClick={() => setRegData({ ...regData, plan: 'anual' })}
               >
-                <span className="recommended-badge">Recomendado - Ahorra 15%</span>
+                <span className="recommended-badge">Recomendado - Ahorra 10%</span>
                 <div className="plan-header">
                   <span className="plan-name">Plan Anual</span>
                   <div className="plan-price">
-                    <span className="price-amount">$490 USD</span>
+                    <span className="price-amount">S/. 1,620</span>
                     <span className="price-period">/ año</span>
                   </div>
-                  <span className="save-period">(2 Meses Gratis)</span>
+                  <span className="save-period">(10% de Descuento - Incluye IGV)</span>
                 </div>
                 <div className="plan-body">
                   <ul className="plan-features">

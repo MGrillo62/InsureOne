@@ -197,13 +197,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <Link href="/dashboard" className="logo-container">
-            {/* SVG custom representation of InsureONE logo based on the provided image */}
-            <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-              <circle cx="50" cy="50" r="46" stroke="#00D2C4" strokeWidth="8" fill="transparent" />
-              <path d="M50 20 C60 20, 70 30, 70 45 C70 65, 50 80, 50 80 C50 80, 30 65, 30 45 C30 30, 40 20, 50 20 Z" fill="#00D2C4" opacity="0.15" />
-              <path d="M30 45 L50 25 L70 45 C70 65, 50 80, 50 80 Z" stroke="#00D2C4" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M40 50 L47 57 L63 41" stroke="#00D2C4" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <img 
+              src="/isotype.png" 
+              alt="BrokerSync Isotype" 
+              style={{ width: '28px', height: '28px', objectFit: 'contain', flexShrink: 0 }} 
+            />
             <span style={{ display: sidebarCollapsed ? 'none' : 'block', marginLeft: '5px' }}>
               <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Broker</span>
               <span style={{ color: '#00D2C4', fontWeight: 500 }}>Sync</span>

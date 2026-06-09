@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     });
 
     // 2. Create the payment record (Culqui simulation)
-    const paymentAmount = plan === 'anual' ? 490.00 : 49.00;
+    const paymentAmount = plan === 'anual' ? 1620.00 : 150.00;
     await createTenantPago({
       id_tenant: newTenant.id,
       monto: paymentAmount,

@@ -128,21 +128,39 @@ export default function ConfiguracionPage() {
     return dateStr;
   };
 
+  const formatDateToInput = (dateStr: string): string => {
+    if (!dateStr) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    const parts = dateStr.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    return dateStr;
+  };
+
   const handleEdit = (t: Tenant) => {
-    setEditingTenantId(t.id);
-    setNombre(t.nombre);
-    setRazonSocial(t.razon_social || '');
-    setRuc(t.ruc || '');
-    setEstado(t.estado || 'Activo');
-    setSuscripcionTipo(t.suscripcion_tipo || 'Anual');
-    setSuscripcionMonto(t.suscripcion_monto || 0);
-    setFechaInicio(t.fecha_inicio || '');
-    setFechaFin(t.fecha_fin || '');
-    setLogoUrl(t.logo_url || '');
-    setAdminEmail(t.admin_email || '');
-    setAdminPassword(t.admin_password || '');
-    setModalTab('datos');
-    setModalOpen(true);
+    try {
+      setEditingTenantId(t.id);
+      setNombre(t.nombre || '');
+      setRazonSocial(t.razon_social || '');
+      setRuc(t.ruc || '');
+      setEstado(t.estado || 'Activo');
+      setSuscripcionTipo(t.suscripcion_tipo || 'Anual');
+      setSuscripcionMonto(typeof t.suscripcion_monto === 'number' ? t.suscripcion_monto : parseFloat(t.suscripcion_monto as any) || 0);
+      setFechaInicio(formatDateToInput(t.fecha_inicio || ''));
+      setFechaFin(formatDateToInput(t.fecha_fin || ''));
+      setLogoUrl(t.logo_url || '');
+      setAdminEmail(t.admin_email || '');
+      setAdminPassword(t.admin_password || '');
+      setModalTab('datos');
+      setModalOpen(true);
+    } catch (err) {
+      console.error('Error handling edit:', err);
+      alert('Error al abrir la edición de inquilino.');
+    }
   };
 
   const handleCreateNew = () => {
@@ -152,7 +170,7 @@ export default function ConfiguracionPage() {
     setRuc('');
     setEstado('Activo');
     setSuscripcionTipo('Anual');
-    setSuscripcionMonto(0);
+    setSuscripcionMonto(1620); // Default annual subscription in Soles
     setAdminEmail('');
     setAdminPassword('');
     
@@ -558,7 +576,13 @@ export default function ConfiguracionPage() {
                         <select 
                           className="form-input" 
                           value={suscripcionTipo} 
-                          onChange={(e: any) => setSuscripcionTipo(e.target.value)}
+                          onChange={(e: any) => {
+                            const val = e.target.value;
+                            setSuscripcionTipo(val);
+                            if (!editingTenantId) {
+                              setSuscripcionMonto(val === 'Anual' ? 1620 : 150);
+                            }
+                          }}
                           disabled={user?.rol !== 'Superadmin'}
                         >
                           <option value="Mensual">Mensual (Facturación recurrente)</option>
@@ -676,7 +700,7 @@ export default function ConfiguracionPage() {
 
                       <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                         <span style={{ color: '#64748B' }}>Monto suscripción:</span>
-                        <span style={{ fontWeight: 600, color: '#0F172A' }}>USD {Number(suscripcionMonto || 0).toFixed(2)}</span>
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>S/. {Number(suscripcionMonto || 0).toFixed(2)} (inc. IGV)</span>
                       </div>
 
                       <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
@@ -728,7 +752,7 @@ export default function ConfiguracionPage() {
                     
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Monto (USD) *</label>
+                        <label className="form-label" style={{ fontSize: '11px' }}>Monto (S/.) *</label>
                         <input 
                           type="number" 
                           step="0.01"
@@ -828,7 +852,7 @@ export default function ConfiguracionPage() {
                             <td>{formatDateToLocal(p.fecha_pago)}</td>
                             <td>{p.metodo_pago}</td>
                             <td style={{ fontWeight: 700, color: '#0F172A' }}>
-                              USD {p.monto.toFixed(2)}
+                              S/. {p.monto.toFixed(2)}
                             </td>
                             <td>
                               <span className={`badge ${
